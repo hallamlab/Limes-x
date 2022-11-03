@@ -15,12 +15,16 @@ class ComputeModule:
     SAVE_FILE='module.json'
     ENTRY_POINT='entry_point.sh'
     def __init__(self, root: str, inputs: list[str], outputs: list[str]) -> None:
-        self._root = _remove_trailing_slash(root)
+        self._root = os.path.abspath(_remove_trailing_slash(root))
+        self.name = root.split('/')[-1]
         self._inputs = inputs
         self._outputs = outputs
 
     def _test_run(self, workspace: str):
-        os.system(f'{self._root}/{self.ENTRY_POINT} {workspace}')
+        os.system(f'{self.GetEntryPoint()} {workspace}')
+
+    def GetEntryPoint(self):
+        return f'{self._root}/{self.ENTRY_POINT}'
 
     @classmethod
     def LoadFromDisk(cls, folder_path: str):
