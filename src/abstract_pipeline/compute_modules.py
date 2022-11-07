@@ -2,42 +2,55 @@ import sys, os
 import json
 import uuid
 import shutil
-from .constants import DP_FOLDER, DATA_FOLDER
-from .common.utils import _remove_trailing_slash
-from data_pointer import DType, DataPointer
+from .constants import MANIFESTS_FOLDER, DATA_FOLDER
+from .common.utils import RemoveTrailingSlash
+from data_pointer import ManifestTemplate, Manifest
 
 def GetDataPointerFolder(workspace: str):
-    dp_dir = f'{workspace}/{DP_FOLDER}'
+    dp_dir = f'{workspace}/{MANIFESTS_FOLDER}'
     return dp_dir
 def GetDataFolder(workspace: str):
     dp_dir = f'{workspace}/{DATA_FOLDER}'
     return dp_dir
 
+class ModuleExistsError(FileExistsError):
+    pass
+
 class ComputeModule:
     _private_constructor_key = uuid.uuid4().hex
     SAVE_FILE='module.json'
     ENTRY_POINT='entry_point.py'
-    def __init__(self, root: str, inputs: list[str], outputs: list[str], _private_constructor_key=None) -> None:
+    def __init__(self, root: str, inputs: list[ManifestTemplate], outputs: list[ManifestTemplate], _private_constructor_key=None) -> None:
         assert _private_constructor_key==self._private_constructor_key, f"constructor is private, use [ComputeModule.CreateNew(...)]"
-        self._root = os.path.abspath(_remove_trailing_slash(root))
+        assert len(set(t.name for t in inputs)) == len(inputs), f"duplicate names for templates are not allowed: inputs [{inputs}]"
+        assert len(set(t.name for t in outputs)) == len(outputs), f"duplicate names for templates are not allowed: outputs [{outputs}]"
+        
+        self._root = os.path.abspath(RemoveTrailingSlash(root))
         self.name = root.split('/')[-1]
         self._inputs = inputs
         self._outputs = outputs
 
     def _test_run(self, workspace: str):
-        workspace = _remove_trailing_slash(workspace)
+        workspace = RemoveTrailingSlash(workspace)
         os.system(f'{self.GetEntryPoint()} {workspace}')
 
     def GetEntryPoint(self):
         return f'{sys.executable} {self._root}/{self.ENTRY_POINT}'
 
-    def _get_inputs(self, workspace: str) -> list[DataPointer]:
-        inputs = [DataPointer.LoadFromFile(workspace, dp_key) for dp_key in self._inputs]
-        return inputs
+    def GetInputManifests(self, workspace: str) -> dict[str, Manifest]:
+        workspace = RemoveTrailingSlash(workspace)
+        man_dir = f'{workspace}/{MANIFESTS_FOLDER}'
+        return dict([(t.name, t.LoadManifest(f'{man_dir}/{t.GenerateSaveName()}')) for t in self._inputs])
 
-    def _submit_outputs(self, outputs: list[DataPointer]):
-        for dp in outputs:
-            dp.SaveToDisk()
+    def GetOutputTemplates(self):
+        return dict((t.name, t) for t in self._outputs)
+
+    def RegisterOutput(self, workspace: str, manifest: Manifest):
+        _candidate_ts = [t for t in self._outputs if t == manifest._template]
+        assert len(_candidate_ts) == 1, f'template not in known outputs, use ListOutputTemplates() get options'
+        workspace = RemoveTrailingSlash(workspace)
+        manifests_dir = f'{workspace}/{MANIFESTS_FOLDER}'
+        manifest.Save(manifests_dir)
 
     @classmethod
     def LoadFromDisk(cls, folder_path: str):
@@ -48,8 +61,9 @@ class ComputeModule:
         with open(save_path) as save:
             save_data = json.load(save)
             io = save_data['io']
-            inputs = io['inputs']
-            outputs = io['outputs']
+            _load_template = lambda x: [ManifestTemplate(k, v) for k, v in io[x].items()]
+            inputs = _load_template('inputs')
+            outputs = _load_template('outputs')
 
             return ComputeModule(
                 folder_path, inputs, outputs,
@@ -57,8 +71,11 @@ class ComputeModule:
             )
 
     @classmethod
-    def CreateNew(cls, save_location: str, name: str, inputs: set[str], outputs: set[str], overwrite: bool=False):
-        save_location = _remove_trailing_slash(save_location)
+    def CreateNew(cls, 
+        save_location: str, name: str,
+        inputs: list[ManifestTemplate], outputs: list[ManifestTemplate], overwrite: bool=False):
+
+        save_location = RemoveTrailingSlash(save_location)
         name = name.replace('/', '_').replace(' ', '-')
         root = f'{save_location}/{name}'
         ep = f'{root}/{cls.ENTRY_POINT}'
@@ -66,16 +83,7 @@ class ComputeModule:
         if overwrite or not os.path.isdir(root):
             os.makedirs(root, exist_ok=True)
         else:
-            raise FileExistsError(f"module [{name}] already exists at [{save_location}]")
-
-        # if not os.path.isfile(ep):
-        # with open(ep, 'w') as entry:
-        #     entry.writelines([f'{line}\n' for line in [
-        #         '#!/bin/bash',
-        #         'PYTHONPATH=../../lib:${PYTHONPATH}',
-        #         'SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )',
-        #         'echo $@',
-        #     ]])
+            raise ModuleExistsError(f"module [{name}] already exists at [{save_location}]")
 
         HERE = '/'.join(os.path.realpath(__file__).split('/')[:-1])
         templates = f'{HERE}/compute_module_template/'
@@ -86,13 +94,12 @@ class ComputeModule:
         sf = f'{root}/{cls.SAVE_FILE}'
         if not os.path.isfile(sf):
             with open(sf, 'w') as save:
+                _save_template = lambda x: dict([d.GenerateDictEntry() for d in x])
                 save.write(json.dumps(dict(
                     io=dict(
-                        inputs=list(inputs),
-                        outputs=list(outputs)
+                        inputs=_save_template(inputs),
+                        outputs=_save_template(outputs),
                     )
                 ), indent=4))
 
         return cls.LoadFromDisk(root)
-
-        

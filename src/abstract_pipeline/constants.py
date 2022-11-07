@@ -1,2 +1,2 @@
-DP_FOLDER = 'data_pointers'
+MANIFESTS_FOLDER = 'manifests'
 DATA_FOLDER = 'intermediate_products'

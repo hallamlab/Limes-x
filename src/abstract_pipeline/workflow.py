@@ -4,16 +4,15 @@ import json
 import uuid
 
 from .compute_modules import ComputeModule
-from .common.utils import _remove_trailing_slash, Abstract
-from .constants import DP_FOLDER
-from data_pointer import DataPointer
-
+from .common.utils import RemoveTrailingSlash, Abstract
+from .constants import MANIFESTS_FOLDER, DATA_FOLDER
+from data_pointer import Manifest, ManifestTemplate
 
 class WorkflowEngine(Abstract):
     def __init__(self, workflow: Workflow, workspace: str,_key=None) -> None:
         super().__init__(_key)
         self.workflow = workflow
-        self.workspace = _remove_trailing_slash(workspace)
+        self.workspace = RemoveTrailingSlash(workspace)
 
     def _make_env(self):
         with open(f'{self.workspace}/env.json', 'w') as env_file:
@@ -24,38 +23,41 @@ class WorkflowEngine(Abstract):
             )
             json.dump(env, env_file,indent=4)
 
-    def Run(self, targets: list[str]):
+    def Run(self, inputs: list[Manifest], targets: list[ManifestTemplate]):
         raise NotImplementedError()
 
 class SnakemakeEngine(WorkflowEngine):
     CONTAINER = '/home/tony/workspace/singularity/WF/snakemake/'
     def __init__(self, workflow: Workflow, workspace: str) -> None:
         super().__init__(workflow, workspace, self._abstract_initializer_key)
+        print('todo: pass through container location')
 
-    def Run(self, targets: list[str]):
-        module_names = set()
+    def Run(self, inputs: list[Manifest], targets: list[ManifestTemplate]):
         T = '\t'
-        ext = DataPointer.EXT
         WS_MOUNT = '/data'
 
         def _make_rule(m: ComputeModule):
             return "\n".join([
                 f'rule {m.name}:',
                 f'{T}input:',
-                ",\n".join([f'{T}{T}"{DP_FOLDER}/{dtype}.{ext}"' for dtype in m._inputs]),
+                ",\n".join([f'{T}{T}"{MANIFESTS_FOLDER}/{template.GenerateSaveName()}"' for template in m._inputs]),
                 f'{T}output:',
-                ",\n".join([f'{T}{T}"{DP_FOLDER}/{dtype}.{ext}"' for dtype in m._outputs]),
+                ",\n".join([f'{T}{T}"{MANIFESTS_FOLDER}/{template.GenerateSaveName()}"' for template in m._outputs]),
                 f'{T}shell:',
                 f'{T}{T}"{m.GetEntryPoint()} {WS_MOUNT}"'
             ])
 
         def _make_targets():
+            module_names = set(m.name for m in self.workflow.compute_modules)
             assert 'all' not in module_names, "[all] is not a valid module name, rename that folder"
             return "\n".join([
                 f'rule all:',
                 f'{T}input:',
-                ",\n".join([f'{T}{T}"{DP_FOLDER}/{dtype}.{ext}"' for dtype in targets]),
+                ",\n".join([f'{T}{T}"{MANIFESTS_FOLDER}/{template.GenerateSaveName()}"' for template in targets]),
             ])
+
+        for m in inputs:
+            m.Save(f'{self.workspace}/{MANIFESTS_FOLDER}')
 
         with open(f'{self.workspace}/snakefile', 'w') as sf:
             sm_config = ''
@@ -63,6 +65,8 @@ class SnakemakeEngine(WorkflowEngine):
             for m in self.workflow.compute_modules:
                 sm_config += f'{_make_rule(m)}\n\n'
             sf.write(sm_config)
+
+        # todo, pass through additional snakemake params
         os.system(f'singularity run -B {self.workspace}:{WS_MOUNT} {self.CONTAINER}')
 
 DefaultEngine = SnakemakeEngine
@@ -70,7 +74,7 @@ DefaultEngine = SnakemakeEngine
 class Workflow:
     def __init__(self, compute_modules_path: str, engineType: type[WorkflowEngine] = DefaultEngine) -> None:
 
-        compute_modules_path = _remove_trailing_slash(compute_modules_path)
+        compute_modules_path = RemoveTrailingSlash(compute_modules_path)
         self.compute_modules: list[ComputeModule] = []
         for folder in os.listdir(compute_modules_path):
             module_path = f'{compute_modules_path}/{folder}'
@@ -80,10 +84,34 @@ class Workflow:
 
         self.engineType = engineType
 
-    def Run(self, workspace: str, targets: list[str]):
-        workspace = os.path.abspath(workspace)
-        if not os.path.isdir(workspace):
-            os.mkdir(workspace)
-        engine = self.engineType(self, workspace)
-        engine.Run(targets)
+    def Run(self, workspace: str,
+        inputs: list[Manifest], targets: list[ManifestTemplate]):
 
+        # prepare folders
+        workspace = os.path.abspath(workspace)
+        man_dir = f'{workspace}/{MANIFESTS_FOLDER}'
+        int_dir = f'{workspace}/{DATA_FOLDER}'
+        for dir in [man_dir, int_dir]:
+            if not os.path.exists(dir):
+                os.makedirs(dir, exist_ok=True)
+
+        # point inputs
+        for d in inputs:
+            d.Save(man_dir)
+
+        # save environment
+        abs_paths = lambda lst: [os.path.abspath(p) for p in lst]
+        env = {
+            'PATH': abs_paths(str(os.environ.get('PATH', '')).split(':')),
+            'PYTHONPATH': abs_paths(list(sys.path)),
+        }
+        with open(f'{workspace}/env.json', 'w') as f:
+            json.dump(env, f, indent=4)
+
+        # run
+        engine = self.engineType(self, workspace)
+        engine.Run(inputs, targets)
+
+    def GetDataTypes(self):
+        for m in self.compute_modules:
+            m._inputs
