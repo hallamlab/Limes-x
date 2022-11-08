@@ -34,7 +34,6 @@ class SnakemakeEngine(WorkflowEngine):
 
     def Run(self, inputs: list[Manifest], targets: list[ManifestTemplate]):
         T = '\t'
-        WS_MOUNT = '/data'
 
         def _make_rule(m: ComputeModule):
             return "\n".join([
@@ -44,7 +43,7 @@ class SnakemakeEngine(WorkflowEngine):
                 f'{T}output:',
                 ",\n".join([f'{T}{T}"{MANIFESTS_FOLDER}/{template.GenerateSaveName()}"' for template in m._outputs]),
                 f'{T}shell:',
-                f'{T}{T}"{m.GetEntryPoint()} {WS_MOUNT}"'
+                f'{T}{T}"{m.GetEntryPointCmd()}"'
             ])
 
         def _make_targets():
@@ -67,7 +66,7 @@ class SnakemakeEngine(WorkflowEngine):
             sf.write(sm_config)
 
         # todo, pass through additional snakemake params
-        os.system(f'singularity run -B {self.workspace}:{WS_MOUNT} {self.CONTAINER}')
+        os.system(f'singularity run -B {self.workspace}:/data {self.CONTAINER}')
 
 DefaultEngine = SnakemakeEngine
 
@@ -102,6 +101,8 @@ class Workflow:
         # save environment
         abs_paths = lambda lst: [os.path.abspath(p) for p in lst]
         env = {
+            'python_exe': sys.executable,
+            'workspace': workspace,
             'PATH': abs_paths(str(os.environ.get('PATH', '')).split(':')),
             'PYTHONPATH': abs_paths(list(sys.path)),
         }

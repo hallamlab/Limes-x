@@ -32,9 +32,9 @@ class ComputeModule:
 
     def _test_run(self, workspace: str):
         workspace = RemoveTrailingSlash(workspace)
-        os.system(f'{self.GetEntryPoint()} {workspace}')
+        os.system(f'{self.GetEntryPointCmd()} {workspace}')
 
-    def GetEntryPoint(self):
+    def GetEntryPointCmd(self):
         return f'{sys.executable} {self._root}/{self.ENTRY_POINT}'
 
     def GetInputManifests(self, workspace: str) -> dict[str, Manifest]:
@@ -77,21 +77,18 @@ class ComputeModule:
 
         save_location = RemoveTrailingSlash(save_location)
         name = name.replace('/', '_').replace(' ', '-')
-        root = f'{save_location}/{name}'
-        ep = f'{root}/{cls.ENTRY_POINT}'
+        module_root = f'{save_location}/{name}'
+        ep = f'{module_root}/{cls.ENTRY_POINT}'
 
-        if overwrite or not os.path.isdir(root):
-            os.makedirs(root, exist_ok=True)
-        else:
+        if os.path.exists(module_root):
             raise ModuleExistsError(f"module [{name}] already exists at [{save_location}]")
 
         HERE = '/'.join(os.path.realpath(__file__).split('/')[:-1])
         templates = f'{HERE}/compute_module_template/'
-        for template in os.listdir(templates):
-            shutil.copy(f'{templates}/{template}', f'{root}/{template}')
+        shutil.copytree(templates, module_root)
         os.chmod(ep, 0o775)
 
-        sf = f'{root}/{cls.SAVE_FILE}'
+        sf = f'{module_root}/{cls.SAVE_FILE}'
         if not os.path.isfile(sf):
             with open(sf, 'w') as save:
                 _save_template = lambda x: dict([d.GenerateDictEntry() for d in x])
@@ -102,4 +99,4 @@ class ComputeModule:
                     )
                 ), indent=4))
 
-        return cls.LoadFromDisk(root)
+        return cls.LoadFromDisk(module_root)
