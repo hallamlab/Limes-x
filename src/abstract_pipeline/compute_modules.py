@@ -1,3 +1,4 @@
+import re
 import sys, os
 import json
 import uuid
@@ -29,6 +30,12 @@ class ComputeModule:
         self.name = root.split('/')[-1]
         self._inputs = inputs
         self._outputs = outputs
+
+    def __str__(self) -> str:
+        return f'module: {self.name}'
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
     def _test_run(self, workspace: str):
         workspace = RemoveTrailingSlash(workspace)
@@ -73,7 +80,8 @@ class ComputeModule:
     @classmethod
     def CreateNew(cls, 
         save_location: str, name: str,
-        inputs: list[ManifestTemplate], outputs: list[ManifestTemplate], overwrite: bool=False):
+        inputs: list[ManifestTemplate], outputs: list[ManifestTemplate],
+        on_exist: str='error'):
 
         save_location = RemoveTrailingSlash(save_location)
         name = name.replace('/', '_').replace(' ', '-')
@@ -81,7 +89,13 @@ class ComputeModule:
         ep = f'{module_root}/{cls.ENTRY_POINT}'
 
         if os.path.exists(module_root):
-            raise ModuleExistsError(f"module [{name}] already exists at [{save_location}]")
+            if on_exist=='overwrite':
+                shutil.rmtree('module_root', ignore_errors=True)
+            elif on_exist=='error':
+                raise ModuleExistsError(f"module [{name}] already exists at [{save_location}]")
+            elif on_exist=='ignore':
+                print(f'module [{name}] already exits! ignoring...')
+                return cls.LoadFromDisk(module_root)
 
         HERE = '/'.join(os.path.realpath(__file__).split('/')[:-1])
         templates = f'{HERE}/compute_module_template/'

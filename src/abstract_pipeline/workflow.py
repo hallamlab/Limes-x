@@ -27,10 +27,10 @@ class WorkflowEngine(Abstract):
         raise NotImplementedError()
 
 class SnakemakeEngine(WorkflowEngine):
-    CONTAINER = '/home/tony/workspace/singularity/WF/snakemake/'
+    CONDA_ENV = 'wf-snakemake'
     def __init__(self, workflow: Workflow, workspace: str) -> None:
         super().__init__(workflow, workspace, self._abstract_initializer_key)
-        print('todo: pass through container location')
+        print('todo: pass through conda env location')
 
     def Run(self, inputs: list[Manifest], targets: list[ManifestTemplate]):
         T = '\t'
@@ -58,15 +58,22 @@ class SnakemakeEngine(WorkflowEngine):
         for m in inputs:
             m.Save(f'{self.workspace}/{MANIFESTS_FOLDER}')
 
-        with open(f'{self.workspace}/snakefile', 'w') as sf:
+        with open(f'{self.workspace}/wf.smk', 'w') as sf:
             sm_config = ''
             sm_config += f'{_make_targets()}\n\n'
             for m in self.workflow.compute_modules:
                 sm_config += f'{_make_rule(m)}\n\n'
             sf.write(sm_config)
 
-        # todo, pass through additional snakemake params
-        os.system(f'singularity run -B {self.workspace}:/data {self.CONTAINER}')
+        # todo: pass through additional snakemake params
+        # todo: installer for conda envs
+        conda_envs = '/'.join(os.environ['CONDA_PREFIX'].split('/')[:-1])
+        snakemake_env = f'{conda_envs}/{self.CONDA_ENV}/bin'
+        print(self.workspace)
+        os.system(" && ".join([
+            f'export PATH={snakemake_env}:$PATH',
+            f'snakemake -d {self.workspace} -s {self.workspace}/wf.smk'
+        ]))
 
 DefaultEngine = SnakemakeEngine
 
@@ -104,7 +111,7 @@ class Workflow:
             'python_exe': sys.executable,
             'workspace': workspace,
             'PATH': abs_paths(str(os.environ.get('PATH', '')).split(':')),
-            'PYTHONPATH': abs_paths(list(sys.path)),
+            'PYTHONPATH': abs_paths(set(sys.path)),
         }
         with open(f'{workspace}/env.json', 'w') as f:
             json.dump(env, f, indent=4)
