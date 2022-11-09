@@ -1,6 +1,6 @@
-from __entry_setup__ import ME, MODULE_PATH, OUTPUT_DIR, INPUTS, OUTPUT_TEMPLATES, RegisterOutput
+from helpers.__entry_setup__ import ME, MODULE_PATH, OUTPUT_DIR, INPUTS, OUTPUT_TEMPLATES, RegisterOutput
 
-import os
+import sys, os
 from abstract_pipeline.compute_modules import ComputeModule
 from data_pointer import ManifestTemplate, Manifest
 

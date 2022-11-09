@@ -27,10 +27,9 @@ class WorkflowEngine(Abstract):
         raise NotImplementedError()
 
 class SnakemakeEngine(WorkflowEngine):
-    CONDA_ENV = 'wf-snakemake'
+    CONDA_ENV = 'wf-snakemake' # needs some guarantee
     def __init__(self, workflow: Workflow, workspace: str) -> None:
         super().__init__(workflow, workspace, self._abstract_initializer_key)
-        print('todo: pass through conda env location')
 
     def Run(self, inputs: list[Manifest], targets: list[ManifestTemplate]):
         T = '\t'
@@ -69,7 +68,6 @@ class SnakemakeEngine(WorkflowEngine):
         # todo: installer for conda envs
         conda_envs = '/'.join(os.environ['CONDA_PREFIX'].split('/')[:-1])
         snakemake_env = f'{conda_envs}/{self.CONDA_ENV}/bin'
-        print(self.workspace)
         os.system(" && ".join([
             f'export PATH={snakemake_env}:$PATH',
             f'snakemake -d {self.workspace} -s {self.workspace}/wf.smk'

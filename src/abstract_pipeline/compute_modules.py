@@ -20,7 +20,7 @@ class ModuleExistsError(FileExistsError):
 class ComputeModule:
     _private_constructor_key = uuid.uuid4().hex
     SAVE_FILE='module.json'
-    ENTRY_POINT='entry_point.py'
+    ENTRY_POINT='helpers/__receiver__.py'
     def __init__(self, root: str, inputs: list[ManifestTemplate], outputs: list[ManifestTemplate], _private_constructor_key=None) -> None:
         assert _private_constructor_key==self._private_constructor_key, f"constructor is private, use [ComputeModule.CreateNew(...)]"
         assert len(set(t.name for t in inputs)) == len(inputs), f"duplicate names for templates are not allowed: inputs [{inputs}]"
@@ -90,7 +90,7 @@ class ComputeModule:
 
         if os.path.exists(module_root):
             if on_exist=='overwrite':
-                shutil.rmtree('module_root', ignore_errors=True)
+                shutil.rmtree(module_root, ignore_errors=True)
             elif on_exist=='error':
                 raise ModuleExistsError(f"module [{name}] already exists at [{save_location}]")
             elif on_exist=='ignore':
@@ -100,7 +100,9 @@ class ComputeModule:
         HERE = '/'.join(os.path.realpath(__file__).split('/')[:-1])
         templates = f'{HERE}/compute_module_template/'
         shutil.copytree(templates, module_root)
-        os.chmod(ep, 0o775)
+        for path, dirs, files in os.walk(module_root):
+            for f in files:
+                os.chmod(os.path.join(path, f), 0o775)
 
         sf = f'{module_root}/{cls.SAVE_FILE}'
         if not os.path.isfile(sf):

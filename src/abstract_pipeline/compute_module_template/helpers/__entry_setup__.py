@@ -1,7 +1,7 @@
 import sys, os
 import json
 
-MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])
+MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-2])
 ENV = {}
 with open(f'env.json') as env_file:
     ENV = json.load(env_file)
