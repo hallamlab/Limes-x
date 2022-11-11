@@ -37,6 +37,8 @@ class SnakemakeEngine(WorkflowEngine):
         def _make_rule(m: ComputeModule):
             return "\n".join([
                 f'rule {m.name}:',
+                f'{T}conda:',
+                f'{T}{T}"wf"',
                 f'{T}input:',
                 ",\n".join([f'{T}{T}"{MANIFESTS_FOLDER}/{template.GenerateSaveName()}"' for template in m._inputs]),
                 f'{T}output:',
@@ -81,7 +83,10 @@ class Workflow:
         compute_modules_path = RemoveTrailingSlash(compute_modules_path)
         self.compute_modules: list[ComputeModule] = []
         for folder in os.listdir(compute_modules_path):
+            if any(folder.startswith(x) for x in ['.', '_']): continue
             module_path = f'{compute_modules_path}/{folder}'
+            if not os.path.isdir(module_path): continue
+
             module = ComputeModule.LoadFromDisk(module_path)
             if module is not None:
                 self.compute_modules.append(module)
@@ -106,9 +111,9 @@ class Workflow:
         # save environment
         abs_paths = lambda lst: [os.path.abspath(p) for p in lst]
         env = {
-            'python_exe': sys.executable,
+            'parent_python_exe': sys.executable,
             'workspace': workspace,
-            'PATH': abs_paths(str(os.environ.get('PATH', '')).split(':')),
+            # 'PATH': abs_paths(str(os.environ.get('PATH', '')).split(':')),
             'PYTHONPATH': abs_paths(set(sys.path)),
         }
         with open(f'{workspace}/env.json', 'w') as f:

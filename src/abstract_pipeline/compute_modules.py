@@ -20,7 +20,7 @@ class ModuleExistsError(FileExistsError):
 class ComputeModule:
     _private_constructor_key = uuid.uuid4().hex
     SAVE_FILE='module.json'
-    ENTRY_POINT='helpers/__receiver__.py'
+    ENTRY_POINT='entry_point.py'
     def __init__(self, root: str, inputs: list[ManifestTemplate], outputs: list[ManifestTemplate], _private_constructor_key=None) -> None:
         assert _private_constructor_key==self._private_constructor_key, f"constructor is private, use [ComputeModule.CreateNew(...)]"
         assert len(set(t.name for t in inputs)) == len(inputs), f"duplicate names for templates are not allowed: inputs [{inputs}]"
