@@ -1,25 +1,92 @@
 import os
 import uuid
-from typing import Callable
+from typing import IO, Callable
 from inspect import signature
+import subprocess
+from threading import Condition, Thread
+from queue import Queue
 
 def RemoveTrailingSlash(path: str):
     return path[:-1] if path[-1] == '/' else path
 
-class AbstractClassException(Exception):
+class PrivateInitException(Exception):
     def __init__(self) -> None:
-        super().__init__(f'can not initialize abstract class without concrete implimentation')
+        super().__init__(f'this class cant be initialized with a call, look for a classmethod')
 
-class AbstractFunctionException(Exception):
-    def __init__(self) -> None:
-        super().__init__(f'this abstract function has no implimentation')
-
-class Abstract:
-    """pass self._abstract_initializer_key in constructor of implimenting class"""
-    _abstract_initializer_key: str = uuid.uuid4().hex
+class PrivateInit:
+    _initializer_key: str = uuid.uuid4().hex
 
     def __init__(self, _key=None) -> None:
-        if _key != self._abstract_initializer_key: raise AbstractClassException
+        if _key != self._initializer_key: raise PrivateInitException
+
+class AutoPopulate:
+    def __init__(self, **kwargs) -> None:
+        for k, type_str in self.__annotations__.items():
+            if k in kwargs:
+                setattr(self, k, kwargs[k])
+            else:
+                setattr(self, k, None)
+
+def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[[str], None]|None=None):
+    class _Pipe:
+        def __init__(self, io:IO[bytes]|None, lock: Condition=Condition(), q: Queue=Queue()) -> None:
+            assert io is not None
+            self.IO = io
+            self.Lock = lock
+            self.Q = q
+
+    def callback(cb, msg):
+        if cb is None:
+            print(msg, end='')
+        else:
+            cb(msg)
+
+    ENCODING = 'utf-8'
+
+    # if isinstance(cmd, str):
+    #     cmd = [cmd]
+    # cmd = [c.strip() for c in cmd]
+
+    process = subprocess.Popen(
+        cmd,
+        shell=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    # first = True
+    # last_process = None
+    # for c in cmd:
+    #     p = subprocess.Popen(c, shell=True)
+        
+    #     first = False
+
+    # callback(onOut, f'{" | ".join(cmd)}\n')
+    callback(onOut, f'{cmd}\n')
+    _in, _out, _err = [_Pipe(io) for io in [process.stdin, process.stdout, process.stderr]]
+    _process = process
+
+    workers: list[Thread] = []
+    def reader(pipe: _Pipe, cb: Callable[[str], None]|None):
+        io = iter(pipe.IO.readline, b'')
+        while True:
+            try:
+                line = next(io)
+            except (StopIteration, ValueError) as e:
+                # print(f'err:{type(e)} {e.args}|')
+                break
+            chunk = bytes.decode(line, encoding=ENCODING)
+            callback(cb, chunk)
+    workers.append(Thread(target=reader, args=[_out, onOut]))
+    workers.append(Thread(target=reader, args=[_err, onErr]))
+        
+    for w in workers:
+        w.daemon = True # stop with program
+        w.start()
+
+    _process.wait()
+    return _process.poll()
 
 ###
 
