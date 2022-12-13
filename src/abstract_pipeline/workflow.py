@@ -1,87 +1,12 @@
-from __future__ import annotations
 import os, sys
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Any, Literal
 import json
 
-from .solver import Transform, DependencySolver
+from .solver import DependencySolver
 from .common.utils import AutoPopulate, PrivateInit, LiveShell
-
-
-# each item should be its own atomic thing... [thinking emoji]
-class Item(PrivateInit):
-    _instances: dict[str, Item] = {}
-    
-    @classmethod
-    def Get(cls, key: str) -> Item:
-        if key not in cls._instances:
-            instance = Item(key, _ikey=cls._initializer_key)
-            cls._instances[key] = instance
-        return cls._instances[key]
-
-    def __repr__(self) -> str:
-        return f'<i:{self.key}>'
-
-    def __init__(self, key: str, _ikey=None) -> None:
-        super().__init__(_key=_ikey)
-        self.key = key
-        # self.persona_keys = {t.key for t in personas}
-
-    # def CanBe(self, other: Item):
-    #     return self.key in other.persona_keys
-
-    # def GenerateFilePath(self, root: Path, file: Path):
-    #     # return [root.joinpath(f) for f in files]
-    #     return root.joinpath(file)
-
-ManifestDict = dict[Item, Path]
-
-class Params(AutoPopulate):
-    # id: str
-    threads: int
-    mem_gb: int
-
-    def Copy(self):
-        cp = Params(**self.__dict__)
-        return cp
-
-class RunContext(AutoPopulate):
-    params: Params
-    shell: Callable[[str], int]
-    output_folder: Path
-    manifest: ManifestDict
-
-class RunResult(AutoPopulate):
-    exit_code: int
-    manifest: ManifestDict|list[ManifestDict]
-
-class ComputeModule:
-    def __init__(self, procedure: Callable[[RunContext], RunResult], inputs: set[Item], outputs: set[Item]) -> None:
-        self.name = procedure.__name__
-        assert not Transform.Exists(self.name)
-        assert len(inputs.intersection(outputs)) == 0
-        self.inputs = inputs
-        self.outputs = outputs
-        self._procedure = procedure
-
-    def __repr__(self) -> str:
-        return f'<m:{self.name}>'
-
-    def GetTransform(self):
-        if Transform.Exists(self.name):
-            return Transform.Get(self.name)
-        else:
-            return Transform.Create(
-                {x.key for x in self.inputs},
-                {x.key for x in self.outputs},
-                unique_name=self.name,
-                reference=self,
-            )
-
-    def Run(self, context: RunContext):
-        # p = Params()
-        # p.shell = lambda cmd: CondaShell(f'{self.name}', cmd)
-        return self._procedure(context)
+from .compute_module import Item, ComputeModule, Params, RunContext
+from .executors import Executor
 
 class RunError(Exception):
     pass
@@ -163,66 +88,70 @@ class Workflow:
         steps = self._solver.Solve(given_k, targets_k)
         return steps
 
-    def Run(self, params: Params, workspace: str|Path, targets: Iterable[Item]):
+    # todo: extract responsibility to dedicated class
+    def _conda_shell(self, cmd):
+            return LiveShell(f'conda run --no-capture-output -n flux_runtime {cmd}')
+
+    def Run(self, params: Params, workspace: str|Path, targets: Iterable[Item], executor: Executor):
         if isinstance(workspace, str): workspace = Path(workspace)
         original_dir = os.getcwd()
-        os.chdir(workspace)
+        try:
+            os.chdir(workspace)
 
-        # todo: extract responsibility to dedicated class
-        def _conda_shell(cmd):
-            return LiveShell(f'conda run --no-capture-output -n flux_runtime {cmd}')
-            # print(cmd)
-            # return 0
+            state = WorkflowState(Path("./"))
+            inputs = state.GetNamespace(())
+            calculated_order = self._calculate(inputs.keys(), targets)
 
-        state = WorkflowState(workspace)
-        inputs = state.GetNamespace(())
-        calculated_order = self._calculate(inputs.keys(), targets)
+            if calculated_order is False:
+                print('no solution')
+                return
+            if len(calculated_order) == 0:
+                print('nothing to do')
+                return
 
-        if calculated_order is False:
-            print('no solution')
-            return
-        if len(calculated_order) == 0:
-            print('nothing to do')
-            return
+            steps: list[ComputeModule] = []
+            for s in calculated_order:
+                _cm = s.reference
+                assert isinstance(_cm, ComputeModule)
+                steps.append(_cm)
+            nexts = dict((steps[i], steps[i+1]) for i, _ in enumerate(steps) if i<len(steps)-1)
+            # print(nexts, steps)
 
-        steps: list[ComputeModule] = []
-        for s in calculated_order:
-            _cm = s.reference
-            assert isinstance(_cm, ComputeModule)
-            steps.append(_cm)
-        nexts = dict((steps[i], steps[i+1]) for i, _ in enumerate(steps) if i<len(steps)-1)
-        # print(nexts, steps)
+            todo: list[tuple[list, ComputeModule]] = [
+                ([], steps[0])
+            ]
+            while len(todo) > 0:
+                _namespace, this_step = todo.pop(0)
+                namespace = tuple(_namespace)
 
-        todo: list[tuple[list, ComputeModule]] = [
-            ([], steps[0])
-        ]
-        while len(todo) > 0:
-            _namespace, this_step = todo.pop(0)
-            namespace = tuple(_namespace)
+                context = RunContext(
+                    shell=self._conda_shell,
+                    output_folder = Path(this_step.name),
+                    params=params.Copy(),
+                    manifest=state.GetNamespace(namespace),
+                )
 
-            context = RunContext(
-                shell=_conda_shell,
-                output_folder = Path(this_step.name),
-                params=params.Copy(),
-                manifest=state.GetNamespace(namespace),
-            )
+                print(f"namespace: {'.'.join(_namespace) if len(_namespace)>0 else 'root'}, running step: {this_step.name}")
+                result = executor.Run(this_step, context)
+                # print()
 
-            print(f"namespace: {'.'.join(_namespace) if len(_namespace)>0 else 'root'}, running step: {this_step.name}")
-            result = this_step.Run(context)
-            # print()
+                if result.exit_code != 0:
+                    raise RunError(f"{this_step.name} failed with code {result.exit_code}")
+                def check_outputs(man: dict):
+                    for path in man.values():
+                        assert os.path.exists(path), f"promised output [{path}] doesn't exist"
 
-            if result.exit_code != 0:
-                raise RunError(f"{this_step.name} failed with code {result.exit_code}")
+                if isinstance(result.manifest, dict):
+                    check_outputs(result.manifest)
+                    state.Update(namespace, result.manifest)
+                    if this_step in nexts: todo.append((_namespace, nexts[this_step]))
+                else: # split
+                    for j, m in enumerate(result.manifest):
+                        check_outputs(m)
+                        new_ns = _namespace+[f'{this_step.name}_{j+1}']
+                        state.Update(tuple(new_ns), m)
+                        if this_step in nexts: todo.append((new_ns, nexts[this_step]))
 
-            if isinstance(result.manifest, dict):
-                state.Update(namespace, result.manifest)
-                if this_step in nexts: todo.append((_namespace, nexts[this_step]))
-            else: # split
-                for j, m in enumerate(result.manifest):
-                    new_ns = _namespace+[f'{this_step.name}_{j+1}']
-                    state.Update(tuple(new_ns), m)
-                    if this_step in nexts: todo.append((new_ns, nexts[this_step]))
-
-            state.Save()
-
-        os.chdir(original_dir)
+                state.Save()
+        finally:
+            os.chdir(original_dir)

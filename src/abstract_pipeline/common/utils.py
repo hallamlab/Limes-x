@@ -27,7 +27,7 @@ class AutoPopulate:
             else:
                 setattr(self, k, None)
 
-def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[[str], None]|None=None):
+def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[[str], None]|None=None, echo_cmd: bool=True) -> int:
     class _Pipe:
         def __init__(self, io:IO[bytes]|None, lock: Condition=Condition(), q: Queue=Queue()) -> None:
             assert io is not None
@@ -63,7 +63,7 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
     #     first = False
 
     # callback(onOut, f'{" | ".join(cmd)}\n')
-    callback(onOut, f'{cmd}\n')
+    if echo_cmd: callback(onOut, f'{cmd}\n')
     _in, _out, _err = [_Pipe(io) for io in [process.stdin, process.stdout, process.stderr]]
     _process = process
 
@@ -86,7 +86,9 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
         w.start()
 
     _process.wait()
-    return _process.poll()
+    code = _process.poll()
+    if code is None: code = 1
+    return code
 
 ###
 
