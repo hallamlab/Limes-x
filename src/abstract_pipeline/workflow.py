@@ -9,7 +9,9 @@ from .compute_module import Item, ComputeModule, Params, RunContext
 from .executors import Executor
 
 class RunError(Exception):
-    pass
+     def __init__(self, message=""):
+        self.message = message
+        super().__init__(self.message)
 
 class WorkflowState:
     FILE_NAME = 'manifest.json'
@@ -26,23 +28,25 @@ class WorkflowState:
                 return tuple(ns.split(self.SEP))
 
         manifest: dict[tuple, dict[Item, Path]] = {}
-        with open(workspace.joinpath(self.FILE_NAME)) as j:
-            _m: dict = json.load(j)
-            for ns, files in _m.items():
-                sub_man = {}
-                for k, v in files.items():
-                    item = Item.Get(k)
-                    if item is None:
-                        print(f"warning: unrecognized manifest entry: {k}")
-                        continue
-                    path = Path(v)
-                    check_path = workspace.joinpath(path)
-                    if not check_path.exists():
-                        print(f"warning: file at path doesn't exist {check_path}")
-                        continue
+        manifest_path = workspace.joinpath(self.FILE_NAME)
+        if os.path.exists(manifest_path):
+            with open(manifest_path) as j:
+                _m: dict = json.load(j)
+                for ns, files in _m.items():
+                    sub_man = {}
+                    for k, v in files.items():
+                        item = Item.Get(k)
+                        if item is None:
+                            print(f"warning: unrecognized manifest entry: {k}")
+                            continue
+                        path = Path(v)
+                        check_path = workspace.joinpath(path)
+                        if not check_path.exists():
+                            print(f"warning: file at path doesn't exist {check_path}")
+                            continue
 
-                    sub_man[item] = path
-                manifest[_parse_ns(ns)] = sub_man
+                        sub_man[item] = path
+                    manifest[_parse_ns(ns)] = sub_man
 
         self._workspace = workspace
         self._manifest = manifest
@@ -50,7 +54,7 @@ class WorkflowState:
     def GetNamespace(self, namespace: tuple) -> dict[Item, Path]:
         visible = {}
         while True:
-            visible.update(self._manifest[namespace])
+            visible.update(self._manifest.get(namespace, dict()))
             _namesp_to_add = namespace[:-1]
             if len(_namesp_to_add) == 0: break
         return visible
@@ -92,20 +96,41 @@ class Workflow:
     def _conda_shell(self, cmd):
             return LiveShell(f'conda run --no-capture-output -n flux_runtime {cmd}')
 
-    def Run(self, params: Params, workspace: str|Path, targets: Iterable[Item], executor: Executor):
+    def Run(self, params: Params, workspace: str|Path, targets: Iterable[Item], given: dict[Item, str|Path], executor: Executor):
         if isinstance(workspace, str): workspace = Path(workspace)
+        if not workspace.exists():
+            os.makedirs(workspace)
+
+        # abs. path before change to working dir
+        sys.path = [os.path.abspath(p) for p in sys.path]
+        abs_given = dict((k, os.path.abspath(p)) for k, p in given.items())
+
         original_dir = os.getcwd()
         try:
             os.chdir(workspace)
 
-            state = WorkflowState(Path("./"))
+            # initialize state (with inputs and existing files)
+            state = WorkflowState('./')
             inputs = state.GetNamespace(())
-            calculated_order = self._calculate(inputs.keys(), targets)
+            if len(abs_given) > 0:
+                input_dir = Path("./inputs")
+                os.makedirs(input_dir, exist_ok=True)
+                for k, p in abs_given.items():
+                    p = Path(p)
+                    linked = input_dir.joinpath(p.name)
+                    if linked.exists(): os.remove(linked)
+                    os.symlink(p, linked)
+                    inputs[k] = linked
+                state.Update((), inputs)
+                state.Save()
 
+            calculated_order = self._calculate(inputs.keys(), targets)
             if calculated_order is False:
+                os.chdir(original_dir)
                 print('no solution')
                 return
             if len(calculated_order) == 0:
+                os.chdir(original_dir)
                 print('nothing to do')
                 return
 
@@ -133,7 +158,6 @@ class Workflow:
 
                 print(f"namespace: {'.'.join(_namespace) if len(_namespace)>0 else 'root'}, running step: {this_step.name}")
                 result = executor.Run(this_step, context)
-                # print()
 
                 if result.exit_code != 0:
                     raise RunError(f"{this_step.name} failed with code {result.exit_code}")
@@ -145,7 +169,7 @@ class Workflow:
                     check_outputs(result.manifest)
                     state.Update(namespace, result.manifest)
                     if this_step in nexts: todo.append((_namespace, nexts[this_step]))
-                else: # split
+                else: # multiple outputs, so split
                     for j, m in enumerate(result.manifest):
                         check_outputs(m)
                         new_ns = _namespace+[f'{this_step.name}_{j+1}']

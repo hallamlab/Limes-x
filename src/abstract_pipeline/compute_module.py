@@ -60,15 +60,14 @@ class Params(AutoPopulate):
 class RunContext(AutoPopulate):
     params: Params
     shell: Callable[[str], int]
-    workspace: Path
     output_folder: Path
     manifest: ManifestDict
 
     def ToDict(self):
-        d = self.__dict__.copy()
-        for k in d:
-            if k == 'shell': continue
-            v: Any = d[k]
+        d = {}
+        for k, v in self.__dict__.items():
+            if k in ['shell', 'workspace', 'output_folder']: continue
+            v: Any = v
             v = { # switch
                 Params: lambda: v.ToDict(),
                 dict: lambda: dict((mk.key, str(mv)) for mk, mv in v.items()),
@@ -94,9 +93,9 @@ class RunResult(AutoPopulate):
     manifest: ManifestDict|list[ManifestDict]
 
     def ToDict(self):
-        d = self.__dict__.copy()
-        for k in d:
-            v: Any = d[k]
+        d = {}
+        for k, v in self.__dict__.items():
+            v: Any = v
             v = { # switch
                 int: lambda: v,
                 dict: lambda: dict((mk.key, str(mv)) for mk, mv in v.items()),
@@ -132,17 +131,17 @@ class ComputeModule(PrivateInit):
 
         super().__init__(_key=kwargs.get('_key'))
         self.name = procedure.__name__ if name is None else name
-        assert name != ""
+        assert self.name != ""
         assert not Transform.Exists(self.name), f"duplicate compute module [{self.name}]"
         assert len(inputs.intersection(outputs)) == 0
         self.inputs = inputs
         self.outputs = outputs
         self._procedure = procedure
-        self.location = Path(location)
+        self.location = Path(location).absolute()
 
     @classmethod
     def LoadFromDisk(cls, folder_path: str|Path):
-        folder_path = str(folder_path)
+        folder_path = str(Path(folder_path))
         assert os.path.exists(folder_path)
         original_paths = sys.path.copy()
         sys.path.insert(0, folder_path)
