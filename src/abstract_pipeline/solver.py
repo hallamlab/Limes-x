@@ -38,6 +38,10 @@ class Transform(PrivateInit):
     def Exists(cls, name: str):
         return name in cls._instances
 
+    def Unregister(self):
+        del self._instances[self.key]
+        del self._keys[self.key]
+
     def __init__(self, ins:set[str], outs:set[str], unique_name: str, _k=None) -> None:
         super().__init__(_k)
         self._id = Transform._new_id(unique_name)
@@ -70,8 +74,12 @@ class DependencySolver:
     def Solve(self, given: set[str], targets: set[str]):
         self._dependency_map = {}
         self._c = 0
-        return self._solve(given, targets, [], 0, 0)
-
+        result = self._solve(given, targets, [], 0, 0)
+        dep_map = {}
+        for k, v in self._dependency_map.items():
+            dep_map[k] = [t.reference if t.reference is not None  else t.key for t in v]
+        return result, dep_map
+        
     def _solve(self, given: set[str], targets: set[str], visited:list, max_depth, depth) -> list[Transform]|Literal[False]:
         self._c += 1
         if max_depth != 0 and depth > max_depth:
@@ -104,7 +112,7 @@ class DependencySolver:
                     path = self._solve(given, node.ins, visited+[node.key], len(best), depth+1)
                     if path == False: continue
 
-                    path.append(node)
+                    if node not in path: path.append(node)
                     self._dependency_map[node.key] = path
                 if len(best)==0 or len(path)<len(best):
                     found_target = True
@@ -121,4 +129,4 @@ class DependencySolver:
                 result.append(r)
                 _found.add(r)
             return result
-        return False
+        return False   

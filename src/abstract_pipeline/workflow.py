@@ -14,71 +14,103 @@ class RunError(Exception):
         super().__init__(self.message)
 
 class WorkflowState:
-    FILE_NAME = 'manifest.json'
-    SEP = '.'
+    _FILE_NAME = 'manifest.json'
+    ROOT: str = "root"
 
     def __init__(self, workspace: str|Path) -> None:
         if isinstance(workspace, str):
             workspace = Path(workspace)
 
-        def _parse_ns(ns: str):
-            if ns=='':
-                return ()
-            else:
-                return tuple(ns.split(self.SEP))
-
-        manifest: dict[tuple, dict[Item, Path]] = {}
-        manifest_path = workspace.joinpath(self.FILE_NAME)
+        manifest = {}
+        namespaces: dict[str, dict] = {} # points to levels in manifest
+        ns_parents: dict[str, str] = {}
+        manifest_path = workspace.joinpath(self._FILE_NAME)
+        seen_ns_keys = set()
         if os.path.exists(manifest_path):
             with open(manifest_path) as j:
-                _m: dict = json.load(j)
-                for ns, files in _m.items():
-                    sub_man = {}
-                    for k, v in files.items():
-                        item = Item.Get(k)
-                        if item is None:
-                            print(f"warning: unrecognized manifest entry: {k}")
-                            continue
-                        path = Path(v)
-                        check_path = workspace.joinpath(path)
-                        if not check_path.exists():
-                            print(f"warning: file at path doesn't exist {check_path}")
-                            continue
+                _m = json.load(j)
 
-                        sub_man[item] = path
-                    manifest[_parse_ns(ns)] = sub_man
+                def _check(parent_k: str, raw_loaded: dict):
+                    if parent_k in seen_ns_keys:
+                        raise ValueError(f"namespace [{parent_k}] has duplicates")
+                    seen_ns_keys.add(parent_k)
+
+                    local_ns = {}
+                    for k, entry in raw_loaded.items():
+                        if isinstance(entry, str):
+                            check_path = workspace.joinpath(entry)
+                            if not check_path.exists():
+                                print(f"warning: file at path doesn't exist {check_path}")
+                                continue
+                            ik, p = Item.Get(k), Path(entry)
+                            local_ns[ik] = p
+                        else: # type is dict, found chile namespace
+                            sub_ns = _check(k, entry)
+                            local_ns[k] = sub_ns
+                            ns_parents[k] = parent_k
+                    namespaces[parent_k] = local_ns
+                    return local_ns
+                manifest = _check(self.ROOT, _m)
+        else:
+            namespaces[self.ROOT] = manifest
 
         self._workspace = workspace
         self._manifest = manifest
+        self._namespaces = namespaces
+        self._ns_parents = ns_parents
 
-    def GetNamespace(self, namespace: tuple) -> dict[Item, Path]:
-        visible = {}
+    def NamespaceExists(self, key: str):
+        return key in self._namespaces
+
+    def NewNamespace(self, key: str, parent_key: str|None = None):
+        if parent_key is None: parent_key = self.ROOT
+        assert self.NamespaceExists(parent_key)
+        assert not self.NamespaceExists(key)
+
+        new = {}
+        self._namespaces[parent_key][key] = new
+        self._namespaces[key] = new
+        self._ns_parents[key] = parent_key
+
+    def GetNamespace(self, key: str) -> dict[Item, Path]:
+        if not self.NamespaceExists(key): return {}
+        
+        visible = self._namespaces[key].copy()
+        namespaces = []
         while True:
-            visible.update(self._manifest.get(namespace, dict()))
-            _namesp_to_add = namespace[:-1]
-            if len(_namesp_to_add) == 0: break
+            if key not in self._ns_parents: break
+            pkey = self._ns_parents[key]
+            namespaces.append(self._namespaces[pkey])
+            key = pkey
+
+        for ns in namespaces:
+            for k, v in ns.items():
+                if not isinstance(k, Item): continue
+                visible[k] = v
         return visible
 
-    def Update(self, namespace: tuple, content: dict[Item, Path]):
-        d = self._manifest.get(namespace, {})
-        d.update(content)
-        self._manifest[namespace] = d
+    def GetRoot(self):
+        return self.GetNamespace(self.ROOT)
 
-    def Set(self, namespace: tuple, key: Item, value: Path):
-        d = self._manifest.get(namespace, {})
-        d[key] = value
-        self._manifest[namespace] = d
+    def Update(self, namespace: str, content: dict[Item, Path]):
+        assert namespace in self._namespaces
+        self._namespaces[namespace].update(content)
+
+    def Set(self, namespace: str, key: Item, value: Path):
+        self.Update(namespace, {key: value})
 
     def Save(self):
-        str_man = {}
-        for ns, d in self._manifest.items():
-            sub_man = {}
-            for item, path in d.items():
-                sub_man[item.key] = str(path)
-            str_man[self.SEP.join(ns)] = sub_man
-
-        with open(self.FILE_NAME, 'w') as j:
-            json.dump(str_man, j, indent=4)
+        def _stringify(man: dict):
+            str_man = {}
+            for k, v in man.items():
+                if isinstance(k, Item):
+                    str_man[k.key] = str(v)
+                else:
+                    str_man[k] = _stringify(v)
+            return str_man
+        stringyfied = _stringify(self._manifest) 
+        with open(self._workspace.joinpath(self._FILE_NAME), 'w') as j:
+            json.dump(stringyfied, j, indent=4)
 
 class Workflow:
     def __init__(self, compute_modules: list[ComputeModule]) -> None:
@@ -92,10 +124,10 @@ class Workflow:
         steps = self._solver.Solve(given_k, targets_k)
         return steps
 
-    # todo: extract responsibility to dedicated class
-    def _conda_shell(self, cmd):
-            return LiveShell(f'conda run --no-capture-output -n flux_runtime {cmd}')
+    def _run(self, steps: list[ComputeModule], state: WorkflowState):
+        pass
 
+    # this just does setup, _run actually executes the compute modules
     def Run(self, params: Params, workspace: str|Path, targets: Iterable[Item], given: dict[Item, str|Path], executor: Executor):
         if isinstance(workspace, str): workspace = Path(workspace)
         if not workspace.exists():
@@ -111,7 +143,7 @@ class Workflow:
 
             # initialize state (with inputs and existing files)
             state = WorkflowState('./')
-            inputs = state.GetNamespace(())
+            inputs = state.GetRoot()
             if len(abs_given) > 0:
                 input_dir = Path("./inputs")
                 os.makedirs(input_dir, exist_ok=True)
@@ -121,7 +153,7 @@ class Workflow:
                     if linked.exists(): os.remove(linked)
                     os.symlink(p, linked)
                     inputs[k] = linked
-                state.Update((), inputs)
+                state.Update(state.ROOT, inputs)
                 state.Save()
 
             calculated_order = self._calculate(inputs.keys(), targets)
@@ -139,43 +171,48 @@ class Workflow:
                 _cm = s.reference
                 assert isinstance(_cm, ComputeModule)
                 steps.append(_cm)
-            nexts = dict((steps[i], steps[i+1]) for i, _ in enumerate(steps) if i<len(steps)-1)
-            # print(nexts, steps)
 
-            todo: list[tuple[list, ComputeModule]] = [
-                ([], steps[0])
-            ]
-            while len(todo) > 0:
-                _namespace, this_step = todo.pop(0)
-                namespace = tuple(_namespace)
+            self._run(steps, state)
 
-                context = RunContext(
-                    shell=self._conda_shell,
-                    output_folder = Path(this_step.name),
-                    params=params.Copy(),
-                    manifest=state.GetNamespace(namespace),
-                )
-
-                print(f"namespace: {'.'.join(_namespace) if len(_namespace)>0 else 'root'}, running step: {this_step.name}")
-                result = executor.Run(this_step, context)
-
-                if result.exit_code != 0:
-                    raise RunError(f"{this_step.name} failed with code {result.exit_code}")
-                def check_outputs(man: dict):
-                    for path in man.values():
-                        assert os.path.exists(path), f"promised output [{path}] doesn't exist"
-
-                if isinstance(result.manifest, dict):
-                    check_outputs(result.manifest)
-                    state.Update(namespace, result.manifest)
-                    if this_step in nexts: todo.append((_namespace, nexts[this_step]))
-                else: # multiple outputs, so split
-                    for j, m in enumerate(result.manifest):
-                        check_outputs(m)
-                        new_ns = _namespace+[f'{this_step.name}_{j+1}']
-                        state.Update(tuple(new_ns), m)
-                        if this_step in nexts: todo.append((new_ns, nexts[this_step]))
-
-                state.Save()
         finally:
             os.chdir(original_dir)
+
+
+
+            # nexts = dict((steps[i], steps[i+1]) for i, _ in enumerate(steps) if i<len(steps)-1)
+            # # print(nexts, steps)
+
+            # todo: list[tuple[str, ComputeModule]] = [
+            #     (state.ROOT, steps[0])
+            # ]
+
+            # while len(todo) > 0:
+            #     namespace, this_step = todo.pop(0)
+
+            #     context = RunContext(
+            #         output_folder = Path(this_step.name),
+            #         params=params.Copy(),
+            #         manifest=state.GetNamespace(namespace),
+            #     )
+
+            #     print(f"namespace: {namespace}, running step: {this_step.name}")
+            #     result = executor.Run(this_step, context)
+
+            #     if result.exit_code != 0:
+            #         raise RunError(f"{this_step.name} failed with code {result.exit_code}")
+            #     def check_outputs(man: dict):
+            #         for path in man.values():
+            #             assert os.path.exists(path), f"promised output [{path}] doesn't exist"
+
+            #     if isinstance(result.manifest, dict):
+            #         check_outputs(result.manifest)
+            #         state.Update(namespace, result.manifest)
+            #         if this_step in nexts: todo.append((_namespace, nexts[this_step]))
+            #     else: # multiple outputs, so split
+            #         for j, m in enumerate(result.manifest):
+            #             check_outputs(m)
+            #             new_ns = _namespace+[f'{this_step.name}_{j+1}']
+            #             state.Update(tuple(new_ns), m)
+            #             if this_step in nexts: todo.append((new_ns, nexts[this_step]))
+
+            #     state.Save()

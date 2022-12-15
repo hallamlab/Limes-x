@@ -34,5 +34,5 @@ class CondaExecutor(Executor):
             with open(result_json) as j:
                 return RunResult.FromDict(json.load(j))
         except FileNotFoundError:
-            print(f'missing result at [{result_json}]')
+            print(f'missing result manifest at [{result_json}]')
             return RunResult(exit_code=1)

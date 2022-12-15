@@ -8,34 +8,32 @@ from typing import Callable, Iterable, Any, Literal
 from .solver import Transform
 from .common.utils import AutoPopulate, PrivateInit
 
-# each item should be its own atomic thing... [thinking emoji]
-class Item(PrivateInit):
-    _instances: dict[str, Item] = {}
-    
-    @classmethod
-    def Get(cls, key: str) -> Item:
-        if key not in cls._instances:
-            instance = Item(key, _ikey=cls._initializer_key)
-            cls._instances[key] = instance
-        return cls._instances[key]
+class Item:
+    _hashes: dict[str, int] = {}
+    _last_hash = -1
 
     def __repr__(self) -> str:
         return f'<i:{self.key}>'
 
-    def __init__(self, key: str, **kwargs) -> None:
-        super().__init__(_key=kwargs.get("_ikey"))
+    def __init__(self, key: str, group_by: Item|None=None) -> None:
         self.key = key
-        # self.persona_keys = {t.key for t in personas}
+        self.group_by = group_by
+        if key in Item._hashes:
+            self._hash = Item._hashes[key]
+        else:
+            Item._last_hash += 1
+            self._hash = Item._last_hash
+            Item._hashes[key] = self._hash
 
-    def GenerateDictEntry(self):
-        return self.key
+    def IsArray(self):
+        return self.group_by is not None
 
-    # def CanBe(self, other: Item):
-    #     return self.key in other.persona_keys
+    def __eq__(self, __o: object) -> bool:
+        if not isinstance(__o, Item): return False
+        return __o.key == self.key
 
-    # def GenerateFilePath(self, root: Path, file: Path):
-    #     # return [root.joinpath(f) for f in files]
-    #     return root.joinpath(file)
+    def __hash__(self) -> int:
+        return self._hash
 
 ManifestDict = dict[Item, Path]
 
@@ -83,14 +81,16 @@ class RunContext(AutoPopulate):
             v = { # switch
                 'shell': lambda: None,
                 'params': lambda: Params.FromDict(v),
-                'manifest': lambda: dict((Item.Get(mk), Path(mv)) for mk, mv in v.items()),
+                'manifest': lambda: dict((Item(mk), Path(mv)) for mk, mv in v.items()),
             }.get(k, lambda: Path(v))()
             kwargs[k] = v
         return RunContext(**kwargs)
 
 class RunResult(AutoPopulate):
     exit_code: int
-    manifest: ManifestDict|list[ManifestDict]
+    error_message: str
+    made_by: str 
+    manifest: dict[Item, Path|list[Path]]
 
     def ToDict(self):
         d = {}
@@ -105,7 +105,7 @@ class RunResult(AutoPopulate):
 
     @classmethod
     def FromDict(cls, d: dict):
-        man_dict = lambda v: dict((Item.Get(mk), Path(mv)) for mk, mv in v.items())
+        man_dict = lambda v: dict((Item(mk), Path(mv)) for mk, mv in v.items())
         kwargs = {}
         for k in d:
             v: Any = d[k]
@@ -120,6 +120,8 @@ class ModuleExistsError(FileExistsError):
     pass
 
 class ComputeModule(PrivateInit):
+    __instances: dict[str, ComputeModule] = {}
+
     def __init__(self,
         procedure: Callable[[RunContext], RunResult],
         inputs: set[Item],
@@ -132,27 +134,38 @@ class ComputeModule(PrivateInit):
         super().__init__(_key=kwargs.get('_key'))
         self.name = procedure.__name__ if name is None else name
         assert self.name != ""
+        assert self.name not in ComputeModule.__instances
         assert not Transform.Exists(self.name), f"duplicate compute module [{self.name}]"
         assert len(inputs.intersection(outputs)) == 0
         self.inputs = inputs
         self.outputs = outputs
         self._procedure = procedure
         self.location = Path(location).absolute()
+        self.output_mask = set()
+        ComputeModule.__instances[self.name] = self
 
     @classmethod
     def LoadFromDisk(cls, folder_path: str|Path):
-        folder_path = str(Path(folder_path))
+        folder_path = Path(folder_path)
+        sfolder_path = str(folder_path)
+        name = sfolder_path.split('/')[-1] # the folder name
+        if name in cls.__instances:
+            return cls.__instances[name]
+
         assert os.path.exists(folder_path)
+        assert os.path.isfile(folder_path.joinpath("definition.py"))
+        assert os.path.isfile(folder_path.joinpath("__main__.py"))
         original_paths = sys.path.copy()
-        sys.path.insert(0, folder_path)
-        de = importlib.import_module("definition", folder_path)
+        sys.path.insert(0, sfolder_path)
+        de = importlib.import_module("definition", sfolder_path)
+        importlib.reload(de)
 
         _procdure, ins, outs = de.Procedure, de.INPUTS, de.OUTPUTS
         module = ComputeModule(
             _procdure,
             ins, outs,
             location=folder_path,
-            name=folder_path.split('/')[-1], # the folder name
+            name=name,
             _key=cls._initializer_key
         )
 
@@ -192,6 +205,16 @@ class ComputeModule(PrivateInit):
 
     def __repr__(self) -> str:
         return f'<m:{self.name}>'
+
+    def __eq__(self, __o: object) -> bool:
+        if not isinstance(__o, ComputeModule): return False
+        return self.name == __o.name
+
+    def MaskOutput(self, item: Item):
+        if item in self.outputs: self.output_mask.add(item)
+
+    def GetUnmaskedOutputs(self):
+        return self.outputs - self.output_mask
 
     def GetTransform(self):
         if Transform.Exists(self.name):
