@@ -16,10 +16,8 @@ if __name__ == '__main__':
     from abstract_pipeline.compute_module import RunContext, ComputeModule
     from abstract_pipeline.common.utils import LiveShell
 
-    # todo: restore executor env here so that the cm can use the env 
-
     MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])
-    module = ComputeModule.LoadFromDisk(MODULE_PATH)
+    module = ComputeModule._load(MODULE_PATH)
 
     context = RunContext.FromDict(ENV.get('context', {}))
     context.shell = lambda c: LiveShell(f"{ENV.get('shell_prefix', '')} {c}".strip())

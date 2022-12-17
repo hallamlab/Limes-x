@@ -8,14 +8,22 @@ from typing import Callable, Iterable, Any, Literal
 from .solver import Transform
 from .common.utils import AutoPopulate, PrivateInit
 
+# different instances can have differing "group_by"
+# depending on parent compute module!
+# 
+# Items really shouldn't have group by
+# this is a property of the compute module's input...
+# 
+# ItemInstances use the string key to circumvent
+# possible incosistencies due to this
 class Item:
     _hashes: dict[str, int] = {}
-    _last_hash = -1
+    _last_hash = 0
 
     def __repr__(self) -> str:
         return f'<i:{self.key}>'
 
-    def __init__(self, key: str, group_by: Item|None=None) -> None:
+    def __init__(self, key: str, group_by: Item|None = None) -> None:
         self.key = key
         self.group_by = group_by
         if key in Item._hashes:
@@ -24,9 +32,6 @@ class Item:
             Item._last_hash += 1
             self._hash = Item._last_hash
             Item._hashes[key] = self._hash
-
-    def IsArray(self):
-        return self.group_by is not None
 
     def __eq__(self, __o: object) -> bool:
         if not isinstance(__o, Item): return False
@@ -120,8 +125,6 @@ class ModuleExistsError(FileExistsError):
     pass
 
 class ComputeModule(PrivateInit):
-    __instances: dict[str, ComputeModule] = {}
-
     def __init__(self,
         procedure: Callable[[RunContext], RunResult],
         inputs: set[Item],
@@ -134,43 +137,58 @@ class ComputeModule(PrivateInit):
         super().__init__(_key=kwargs.get('_key'))
         self.name = procedure.__name__ if name is None else name
         assert self.name != ""
-        assert self.name not in ComputeModule.__instances
-        assert not Transform.Exists(self.name), f"duplicate compute module [{self.name}]"
         assert len(inputs.intersection(outputs)) == 0
         self.inputs = inputs
         self.outputs = outputs
         self._procedure = procedure
         self.location = Path(location).absolute()
-        self.output_mask = set()
-        ComputeModule.__instances[self.name] = self
+        self.output_mask: set[Item] = set()
 
     @classmethod
-    def LoadFromDisk(cls, folder_path: str|Path):
-        folder_path = Path(folder_path)
-        sfolder_path = str(folder_path)
-        name = sfolder_path.split('/')[-1] # the folder name
-        if name in cls.__instances:
-            return cls.__instances[name]
+    def LoadSet(cls, modules_path: str|Path):
+        modules_path = Path(modules_path)
+        compute_modules = []
+        for dir in os.listdir(modules_path):
+            mpath = modules_path.joinpath(dir)
+            if not os.path.isdir(mpath): continue
+            try:
+                m = ComputeModule._load(mpath)
+                compute_modules.append(m)
+            except AssertionError:
+                print(f"[{dir}] failed to load")
+                continue
+        return compute_modules
 
-        assert os.path.exists(folder_path)
-        assert os.path.isfile(folder_path.joinpath("definition.py"))
-        assert os.path.isfile(folder_path.joinpath("__main__.py"))
-        original_paths = sys.path.copy()
-        sys.path.insert(0, sfolder_path)
-        de = importlib.import_module("definition", sfolder_path)
-        importlib.reload(de)
+    @classmethod
+    def _load(cls, folder_path: str|Path):
+        folder_path = Path(os.path.abspath(folder_path))
+        name = str(folder_path).split('/')[-1] # the folder name
 
-        _procdure, ins, outs = de.Procedure, de.INPUTS, de.OUTPUTS
-        module = ComputeModule(
-            _procdure,
-            ins, outs,
-            location=folder_path,
-            name=name,
-            _key=cls._initializer_key
-        )
+        err_msg = f"module [{name}] at [{folder_path}] appears to be corrupted"
+        assert os.path.exists(folder_path), err_msg
+        assert os.path.isfile(folder_path.joinpath("definition.py")), err_msg
+        assert os.path.isfile(folder_path.joinpath("__main__.py")), err_msg
+        original_dir = os.getcwd()
+        os.chdir(folder_path)
+        try:
+            mo = importlib.import_module("definition")
+            importlib.reload(mo) # reload if cached from other compute module
 
-        sys.path = original_paths
-        return module
+            _procdure, ins, outs = mo.Procedure, mo.INPUTS, mo.OUTPUTS
+            assert callable(_procdure)
+            module = ComputeModule(
+                _procdure,
+                set(ins), set(outs),
+                location=folder_path,
+                name=name,
+                _key=cls._initializer_key
+            )
+
+            return module
+        except ImportError:
+            raise ImportError(err_msg)
+        finally:
+            os.chdir(original_dir)
 
     @classmethod
     def GenerateTemplate(cls, 
@@ -189,7 +207,7 @@ class ComputeModule(PrivateInit):
                 raise ModuleExistsError(f"module [{name}] already exists at [{modules_folder}]")
             elif on_exist=='skip':
                 print(f'module [{name}] already exits! skipping...')
-                return cls.LoadFromDisk(module_root)
+                return cls._load(module_root)
 
         try:
             HERE = '/'.join(os.path.realpath(__file__).split('/')[:-1])
@@ -201,7 +219,7 @@ class ComputeModule(PrivateInit):
             for f in files:
                 os.chmod(os.path.join(path, f), 0o775)
 
-        return cls.LoadFromDisk(module_root)
+        return cls._load(module_root)
 
     def __repr__(self) -> str:
         return f'<m:{self.name}>'
