@@ -42,10 +42,17 @@ class Item:
 
 ManifestDict = dict[Item, Path]
 
-class Params(AutoPopulate):
-    # id: str
-    threads: int
-    mem_gb: int
+class Params:
+    def __init__(self,
+        file_system_wait_sec: int=5,
+        threads: int=4,
+        mem_gb: int=8,
+        echo_stdout: bool=False
+    ) -> None:
+        self.file_system_wait_sec = file_system_wait_sec
+        self.threads = threads
+        self.mem_gb = mem_gb
+        self.echo_stdout = echo_stdout
 
     def Copy(self):
         cp = Params(**self.__dict__)
@@ -59,12 +66,14 @@ class Params(AutoPopulate):
         p = Params()
         for k, v in d.items():
             setattr(p, k, v)
+        return p
 
-class RunContext(AutoPopulate):
+class JobContext(AutoPopulate):
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
-    manifest: ManifestDict
+    manifest: dict[Item, Path|list[Path]]
+    job_id: str
 
     def ToDict(self):
         d = {}
@@ -72,9 +81,10 @@ class RunContext(AutoPopulate):
             if k in ['shell', 'workspace', 'output_folder']: continue
             v: Any = v
             v = { # switch
-                Params: lambda: v.ToDict(),
-                dict: lambda: dict((mk.key, str(mv)) for mk, mv in v.items()),
-            }.get(type(v), lambda: str(v))()
+                'shell': lambda: None,
+                'params': lambda: v.ToDict(),
+                'manifest': lambda: dict((mk.key, [str(p) for p in mv] if isinstance(mv, list) else str(mv)) for mk, mv in v.items()),
+            }.get(k, lambda: str(v))()
             d[k] = v
         return d
 
@@ -86,31 +96,35 @@ class RunContext(AutoPopulate):
             v = { # switch
                 'shell': lambda: None,
                 'params': lambda: Params.FromDict(v),
-                'manifest': lambda: dict((Item(mk), Path(mv)) for mk, mv in v.items()),
-            }.get(k, lambda: Path(v))()
+                'output_folder': lambda: Path(v),
+                'manifest': lambda: dict((Item(mk), [Path(p) for p in mv] if isinstance(mv, list) else Path(mv)) for mk, mv in v.items()),
+            }.get(k, lambda: str(v))()
             kwargs[k] = v
-        return RunContext(**kwargs)
+        return JobContext(**kwargs)
 
-class RunResult(AutoPopulate):
-    exit_code: int
-    error_message: str
-    made_by: str 
+class JobResult(AutoPopulate):
+    cmds: list[str]
+    error_message: str|None
+    made_by: str
     manifest: dict[Item, Path|list[Path]]
+    resource_log: list[str]
+    err_log: list[str]
+    out_log: list[str]
 
     def ToDict(self):
         d = {}
         for k, v in self.__dict__.items():
             v: Any = v
+            if v is None: continue
             v = { # switch
-                int: lambda: v,
-                dict: lambda: dict((mk.key, str(mv)) for mk, mv in v.items()),
-            }.get(type(v), lambda: str(v))()
+                "manifest": lambda: dict((mk.key, [str(p) for p in mv] if isinstance(mv, list) else str(mv)) for mk, mv in v.items()),
+            }.get(k, lambda: v)()
             d[k] = v
         return d
 
     @classmethod
     def FromDict(cls, d: dict):
-        man_dict = lambda v: dict((Item(mk), Path(mv)) for mk, mv in v.items())
+        man_dict = lambda v: dict((Item(mk), [Path(p) for p in mv] if isinstance(mv, list) else Path(mv)) for mk, mv in v.items())
         kwargs = {}
         for k in d:
             v: Any = d[k]
@@ -119,14 +133,14 @@ class RunResult(AutoPopulate):
                 "manifest": lambda: man_dict(v) if isinstance(v, dict) else [man_dict(x) for x in v],
             }.get(k, lambda: v)()
             kwargs[k] = v
-        return RunResult(**kwargs)
+        return JobResult(**kwargs)
 
 class ModuleExistsError(FileExistsError):
     pass
 
 class ComputeModule(PrivateInit):
     def __init__(self,
-        procedure: Callable[[RunContext], RunResult],
+        procedure: Callable[[JobContext], JobResult],
         inputs: set[Item],
         outputs: set[Item],
         location: str|Path,
@@ -168,11 +182,12 @@ class ComputeModule(PrivateInit):
         assert os.path.exists(folder_path), err_msg
         assert os.path.isfile(folder_path.joinpath("definition.py")), err_msg
         assert os.path.isfile(folder_path.joinpath("__main__.py")), err_msg
-        original_dir = os.getcwd()
-        os.chdir(folder_path)
+        original_path = sys.path
+        # os.chdir(folder_path.joinpath('..'))
+        sys.path = [str(folder_path)]+sys.path
         try:
-            mo = importlib.import_module("definition")
-            importlib.reload(mo) # reload if cached from other compute module
+            import definition as mo # type: ignore
+            importlib.reload(mo)
 
             _procdure, ins, outs = mo.Procedure, mo.INPUTS, mo.OUTPUTS
             assert callable(_procdure)
@@ -188,7 +203,7 @@ class ComputeModule(PrivateInit):
         except ImportError:
             raise ImportError(err_msg)
         finally:
-            os.chdir(original_dir)
+            sys.path = original_path
 
     @classmethod
     def GenerateTemplate(cls, 

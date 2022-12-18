@@ -37,7 +37,7 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
 
     def callback(cb, msg):
         if cb is None:
-            print(msg, end='')
+            print(msg, end='\r')
         else:
             cb(msg)
 
