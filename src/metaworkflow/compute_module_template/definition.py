@@ -1,4 +1,4 @@
-from abstract_pipeline.compute_module import Item, JobContext, JobResult
+from metaworkflow.compute_module import Item, JobContext, JobResult
 
 A = Item('a')
 B = Item('b')

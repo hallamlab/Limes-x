@@ -2,10 +2,10 @@ import sys, os
 from pathlib import Path
 import json
 
-from abstract_pipeline.compute_module import ComputeModule, JobResult
-from abstract_pipeline.executors import JobEnv
-from abstract_pipeline.common.utils import LiveShell
-from abstract_pipeline.telemetry import ResourceMonitor
+from metaworkflow.compute_module import ComputeModule, JobResult
+from metaworkflow.executors import JobEnv
+from metaworkflow.common.utils import LiveShell
+from metaworkflow.telemetry import ResourceMonitor
 
 if __name__ == '__main__':
     _paths: list = list(sys.argv)
