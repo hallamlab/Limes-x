@@ -31,6 +31,7 @@ class WorkflowState(PrivateInit):
 
         self._steps = steps
         self._path = Path(path)
+        self._changed = False
 
     def _register_item_inst(self, ii: ItemInstance):
         ilst = self._item_lookup.get(ii.item_name, [])
@@ -38,6 +39,7 @@ class WorkflowState(PrivateInit):
         self._item_lookup[ii.item_name] = ilst
 
     def Save(self):
+        if not self._changed: return
         jobs_by_step = {}
         for ji in self._job_instances.values():
             k = ji.step.name
@@ -171,6 +173,15 @@ class WorkflowState(PrivateInit):
 
         state.Update()
         return state
+
+    @classmethod
+    def ResumeIfPossible(cls, workspace: str|Path, steps: list[ComputeModule], given: dict[Item, list[Path]]):
+        workspace = Path(workspace)
+        if os.path.exists(workspace.joinpath(cls._FILE_NAME)):
+            return WorkflowState.LoadFromDisk(workspace, steps)
+        else:
+            assert given is not None
+            return WorkflowState.MakeNew(workspace, steps, given)
 
     def _gen_id(self, id_len: int):
         while True:
@@ -326,6 +337,7 @@ class WorkflowState(PrivateInit):
                     lst = self._item_instance_reservations.get(ii, set())
                     lst.add(job_inst)
                     self._item_instance_reservations[ii] = lst
+            self._changed = True
 
     def RegisterJobComplete(self, job_id: str, created: dict[Item, Path|list[Path]]):
         del self._pending_jobs[job_id]
@@ -343,6 +355,7 @@ class WorkflowState(PrivateInit):
                 insts.append(inst)
             outs[item.key] = insts if len(insts)>1 else insts[0]
         job_inst.AddOutputs(outs)
+
 class Sync:
     def __init__(self) -> None:
         self.lock = Condition()
@@ -419,22 +432,12 @@ class Workflow:
                     os.symlink(p, linked)
                     links.append(linked)
                 inputs[item] = links
-            state = WorkflowState.MakeNew('./', self._compute_modules, inputs)
+            state = WorkflowState.ResumeIfPossible('./', self._compute_modules, inputs)
             state.Save()
 
-            calculated_order, dependency_map = self._calculate(inputs.keys(), targets)
-            if calculated_order is False:
-                print('no solution')
+            if len(state.GetPendingJobs()) == 0:
+                print(f'nothing to do')
                 return
-            if len(calculated_order) == 0:
-                print('nothing to do')
-                return
-
-            steps: list[ComputeModule] = []
-            for s in calculated_order:
-                _cm = s.reference
-                assert isinstance(_cm, ComputeModule)
-                steps.append(_cm)
 
             jobs_ran: dict[str, JobInstance] = {}
             while True:
