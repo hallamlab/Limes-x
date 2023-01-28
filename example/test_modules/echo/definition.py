@@ -11,7 +11,6 @@ def Procedure(context: JobContext) -> JobResult:
     with open(text_file) as f:
         contents = "".join(l[:-1] for l in f.readlines())
         print(f'contents to echo: {contents}')
-
     return JobResult(
         exit_code = context.shell(f'echo "{contents}" > {out_file}'),
         manifest = {
