@@ -1,13 +1,13 @@
 import sys, os
 from pathlib import Path
 import json
-from datetime import datetime
+from datetime import datetime as dt
 
 if __name__ == '__main__':
     _paths: list = list(sys.argv[1:])
-    assert len(_paths) == 3
-    WORKSPACE, relative_output_path = [Path(p) for p in _paths[:2]]
-    PYTHONPATH = str(_paths[2])
+    assert len(_paths) == 4
+    MODULE_PATH, WORKSPACE, relative_output_path = [Path(p) for p in _paths[:3]]
+    PYTHONPATH = str(_paths[3])
     sys.path = list(set(sys.path + PYTHONPATH.split(':')))
 
     from metaworkflow.compute_module import ComputeModule, JobResult, JobContext
@@ -15,7 +15,7 @@ if __name__ == '__main__':
     # from metaworkflow.telemetry import ResourceMonitor
 
     CONTEXT = JobContext.LoadFromDisk(WORKSPACE.joinpath(relative_output_path))
-    MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])
+    # MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])
     THIS_MODULE = ComputeModule._load(MODULE_PATH)
 
     cmd_history = []
@@ -27,8 +27,8 @@ if __name__ == '__main__':
         for line in lines:
             line = line.strip()
             if line == "": continue
-            # timestamp = f"{datetime.now().strftime('%d%b%Y-%H:%M:%S')}>"
-            timestamp = f"{datetime.now().strftime('%H:%M:%S')}>"
+            # timestamp = f"{dt.now().strftime('%d%b%Y-%H:%M:%S')}>"
+            timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
             prepped = f"{CONTEXT.shell_prefix} {line}"
             cmd_history.append(f"{timestamp} {line}")
             def _on_io(s: str, log: list):

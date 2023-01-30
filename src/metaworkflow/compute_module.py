@@ -7,7 +7,6 @@ from typing import Callable, Iterable, Any, Literal
 import json
 import inspect
 
-import metaworkflow
 # from .solver import Transform
 from .common.utils import AutoPopulate, PrivateInit
 
@@ -198,7 +197,7 @@ class ComputeModule(PrivateInit):
         err_msg = f"module [{name}] at [{folder_path}] appears to be corrupted"
         assert os.path.exists(folder_path), err_msg
         assert os.path.isfile(folder_path.joinpath("definition.py")), err_msg
-        assert os.path.isfile(folder_path.joinpath("__main__.py")), err_msg
+        # assert os.path.isfile(folder_path.joinpath("__main__.py")), err_msg
         original_path = sys.path
         # os.chdir(folder_path.joinpath('..'))
         sys.path = [str(folder_path)]+sys.path
@@ -246,7 +245,7 @@ class ComputeModule(PrivateInit):
         except NameError:
             HERE = os.getcwd()
         templates = f'{HERE}/compute_module_template/'
-        shutil.copytree(templates, module_root)
+        shutil.copytree(templates, module_root, ignore=shutil.ignore_patterns("__*__.py", "__pycache__", ".*"))
         for path, dirs, files in os.walk(module_root):
             for f in files:
                 os.chmod(os.path.join(path, f), 0o775)
@@ -267,5 +266,12 @@ class ComputeModule(PrivateInit):
         return self.outputs - self.output_mask
 
     def GenerateStaticRunCommand(self, workspace: Path, output_folder: Path):
-        py_path = os.path.abspath('/'.join(os.path.dirname(inspect.getfile(metaworkflow)).split('/')[:-1]))
-        return f'python {self.location.joinpath("__main__.py")} {workspace} {output_folder} {py_path}'
+        import metaworkflow
+        from metaworkflow import compute_module_template
+
+        def _get_path(mod):
+            return os.path.abspath(os.path.dirname(inspect.getfile(mod)))
+
+        py_path = "/".join(_get_path(metaworkflow).split("/")[:-1])
+        entry_path = Path(_get_path(compute_module_template)).joinpath("__main__.py")
+        return f'python {entry_path} {self.location} {workspace} {output_folder} {py_path}'
