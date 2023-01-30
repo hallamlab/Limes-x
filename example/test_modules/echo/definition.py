@@ -4,7 +4,7 @@ A = Item('test_text')
 B = Item('test_echo')
 
 def Procedure(context: JobContext) -> JobResult:
-    out_file = context.output_folder.joinpath('echoed.txt')
+    out_file = context.work_folder.joinpath('echoed.txt')
     print(context.manifest)
     text_file = context.manifest[A]
     assert not isinstance(text_file, list)

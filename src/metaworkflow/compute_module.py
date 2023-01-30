@@ -4,8 +4,11 @@ from pathlib import Path
 import shutil
 import importlib
 from typing import Callable, Iterable, Any, Literal
+import json
+import inspect
 
-from .solver import Transform
+import metaworkflow
+# from .solver import Transform
 from .common.utils import AutoPopulate, PrivateInit
 
 # different instances can have differing "group_by"
@@ -67,38 +70,54 @@ class Params:
         return p
 
 class JobContext(AutoPopulate):
+    __FILE_NAME = 'context.json'
+    shell_prefix: str
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
     manifest: dict[Item, Path|list[Path]]
     job_id: str
+    run_before: str
+    run_after: str
 
-    def ToDict(self):
-        d = {}
-        for k, v in self.__dict__.items():
-            if k in ['shell', 'workspace', 'output_folder']: continue
-            v: Any = v
-            v = { # switch
-                'shell': lambda: None,
-                'params': lambda: v.ToDict(),
-                'manifest': lambda: dict((mk.key, [str(p) for p in mv] if isinstance(mv, list) else str(mv)) for mk, mv in v.items()),
-            }.get(k, lambda: str(v))()
-            d[k] = v
-        return d
+    def Save(self, workspace: Path):
+        folder = workspace.joinpath(self.output_folder)
+        if not folder.exists(): os.makedirs(folder)
+        with open(folder.joinpath(JobContext.__FILE_NAME), 'w') as j:
+            d = {}
+            for k, v in self.__dict__.items():
+                if k.startswith('_'): continue
+                if k in ['shell', 'output_folder']: continue
+                v: Any = v
+                if v is None: continue
+                v = { # switch
+                    'shell': lambda: None,
+                    'params': lambda: v.ToDict(),
+                    'manifest': lambda: dict((mk.key, [str(p) for p in mv] if isinstance(mv, list) else str(mv)) for mk, mv in v.items()),
+                }.get(k, lambda: str(v))()
+                d[k] = v
+            json.dump(d, j, indent=4)
+            return d
 
     @classmethod
-    def FromDict(cls, d: dict):
-        kwargs = {}
-        for k in d:
-            v: Any = d[k]
-            v = { # switch
-                'shell': lambda: None,
-                'params': lambda: Params.FromDict(v),
-                'output_folder': lambda: Path(v),
-                'manifest': lambda: dict((Item(mk), [Path(p) for p in mv] if isinstance(mv, list) else Path(mv)) for mk, mv in v.items()),
-            }.get(k, lambda: str(v))()
-            kwargs[k] = v
-        return JobContext(**kwargs)
+    def LoadFromDisk(cls, output_folder: Path):
+        with open(output_folder.joinpath(JobContext.__FILE_NAME)) as j:
+            d = json.load(j)
+            kwargs = {}
+            for k in d:
+                v: Any = d[k]
+                v = { # switch
+                    'shell': lambda: None,
+                    'params': lambda: Params.FromDict(v),
+                    'output_folder': lambda: Path(v),
+                    'manifest': lambda: dict((Item(mk), [Path(p) for p in mv] if isinstance(mv, list) else Path(mv)) for mk, mv in v.items()),
+                }.get(k, lambda: str(v))()
+                kwargs[k] = v
+            if 'shell_prefix' not in d:
+                kwargs['shell_prefix'] = ''
+            if 'output_folder' not in d:
+                kwargs['output_folder'] = output_folder
+            return JobContext(**kwargs)
 
 class JobResult(AutoPopulate):
     cmds: list[str]
@@ -247,16 +266,6 @@ class ComputeModule(PrivateInit):
     def GetUnmaskedOutputs(self):
         return self.outputs - self.output_mask
 
-    def GetTransform(self):
-        if Transform.Exists(self.name):
-            return Transform.Get(self.name)
-        else:
-            return Transform.Create(
-                {x.key for x in self.inputs},
-                {x.key for x in self.outputs},
-                unique_name=self.name,
-                reference=self,
-            )
-
     def GenerateStaticRunCommand(self, workspace: Path, output_folder: Path):
-        return f'python {self.location.joinpath("__main__.py")} {workspace} {output_folder}'
+        py_path = os.path.abspath('/'.join(os.path.dirname(inspect.getfile(metaworkflow)).split('/')[:-1]))
+        return f'python {self.location.joinpath("__main__.py")} {workspace} {output_folder} {py_path}'

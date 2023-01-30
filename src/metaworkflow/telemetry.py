@@ -1,5 +1,4 @@
 from pathlib import Path
-import psutil
 import time
 from typing import Any
 from threading import Condition, Thread
@@ -11,11 +10,18 @@ class ResourceMonitor:
 
     def __init__(self, workspace: str|Path, delay_sec: int=60) -> None:
         if isinstance(workspace, str): workspace = Path(workspace)
-        LOG_NAME = 'resources.log'
+        # LOG_NAME = 'resources.log'
+
+        try:
+            import psutil
+        except ModuleNotFoundError:
+            print('the required module psutil was not found')
+            self._started = False
+            return
 
         def current_time_millis():
             return round(time.time() * 1000)
-                
+
         def monitor(condition: Condition, inq: Queue, outq: Queue):
             log_msgs = []
             def _log(msg:str):
@@ -56,6 +62,7 @@ class ResourceMonitor:
         inq, outq = Queue(), Queue()
         worker = Thread(target=monitor, args=(c, inq, outq))
         worker.start()
+        self._started = True
         self._worker = worker
         self._condition = c
         self._inq = inq
@@ -64,6 +71,9 @@ class ResourceMonitor:
         self._log = []
 
     def Stop(self) -> list[str]:
+        if not self._started:
+            return []
+
         if self._stopped: return self._log
         self._stopped = True
         with self._condition:

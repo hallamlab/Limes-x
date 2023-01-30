@@ -7,7 +7,7 @@ import uuid
 from threading import Thread, Condition
 from multiprocessing import Queue
 
-from .solver import DependencySolver
+# from .solver import DependencySolver
 from .common.utils import PrivateInit
 from .compute_module import Item, ComputeModule, Params, JobContext, JobResult
 from .executors import Executor, JobInstance, ItemInstance
@@ -102,6 +102,7 @@ class WorkflowState(PrivateInit):
             given = set(serialized_state["given"])
             todo_items = _flatten(serialized_state["item_instances"])
             todo_jobs = _flatten(serialized_state["module_executions"])
+            job_ids = set(id for _, id, _ in todo_jobs) 
             job_outputs: dict[str, dict] = {}
 
             while len(todo_items)>0 or len(todo_jobs)>0:
@@ -384,17 +385,16 @@ class Workflow:
 
         self._compute_modules = compute_modules
         # self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
-        self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
 
-    def _calculate(self, given: Iterable[Item], targets: Iterable[Item]):
-        given_k = {x.key for x in given}
-        targets_k = {x.key for x in targets} 
-        steps, dep_map = self._solver.Solve(given_k, targets_k)
-        return steps, dep_map
+    # def _calculate(self, given: Iterable[Item], targets: Iterable[Item]):
+    #     given_k = {x.key for x in given}
+    #     targets_k = {x.key for x in targets} 
+    #     steps, dep_map = self._solver.Solve(given_k, targets_k)
+    #     return steps, dep_map
 
     # this just does setup, _run actually executes the compute modules
     def Run(self, workspace: str|Path, targets: Iterable[Item], given: dict[Item, str|Path|list[str]|list[Path]], executor: Executor, params: Params=Params()):
-        if isinstance(workspace, str): workspace = Path(workspace)
+        if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
 
@@ -447,14 +447,10 @@ class Workflow:
                 for job in pending_jobs:
                     jid = job.GetID()
                     if jid in jobs_ran: continue
-                    c = JobContext()
-                    c.job_id = job.GetID()
-                    c.output_folder = Path(f"{job.step.name}--{job.GetID()}")
-                    c.params = params.Copy()
-                    c.manifest = dict((Item(k), [ii.path for ii in v] if isinstance(v, list) else v.path) for k, v in job.inputs.items())
+                    c = job.CreateContext(params)
                     header = f"{job.step.name} [{jid}]"
                     print(f"\nstarting {header} {'>'*(50-len(header))}")
-                    _run_job_async(lambda: executor.Run(job, c))
+                    _run_job_async(lambda: executor.Run(workspace, job, c))
                     jobs_ran[jid] = job
 
                 try:
