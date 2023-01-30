@@ -1,6 +1,7 @@
 import sys, os
 from pathlib import Path
 import json
+from datetime import datetime
 
 from metaworkflow.compute_module import ComputeModule, JobResult
 from metaworkflow.executors import JobEnv
@@ -16,21 +17,33 @@ if __name__ == '__main__':
     THIS_MODULE = ComputeModule._load(MODULE_PATH)
 
     context = ENV.context
-    cmds = []
+    cmd_history = []
     err_log, out_log = [], []
     def _shell(cmd: str):
-        prepped = f"{ENV.shell_prefix} {cmd}".strip()
-        cmds.append(prepped)
-        echo = context.params.echo_stdout
-        def _on_io(s: str, log: list, pre: str):
-            if echo: print(f'{pre}:{context.job_id}: {s}')
-            log.append(s)
 
-        return LiveShell(
-            prepped, echo_cmd=echo,
-            onOut=lambda s: _on_io(s, out_log, "I"),
-            onErr=lambda s: _on_io(s, err_log, "E"),
-        )
+        lines = cmd.split('\n')
+        code = 0
+        for line in lines:
+            line = line.strip()
+            if line == "": continue
+            # timestamp = f"{datetime.now().strftime('%d%b%Y-%H:%M:%S')}>"
+            timestamp = f"{datetime.now().strftime('%H:%M:%S')}>"
+            prepped = f"{ENV.shell_prefix} {line}"
+            cmd_history.append(f"{timestamp} {line}")
+            def _on_io(s: str, log: list):
+                if s.endswith('\n'): s = s[:-1]
+                log.append(f'{timestamp} {s}')
+
+            code = LiveShell(
+                prepped, echo_cmd=False,
+                onOut=lambda s: _on_io(s, out_log),
+                onErr=lambda s: _on_io(s, err_log),
+            )
+            if code != 0:
+                return code
+
+        return code
+
     context.shell = _shell
     context.output_folder = relative_output_path
 
@@ -45,7 +58,7 @@ if __name__ == '__main__':
             result = JobResult()
             result.error_message = f"procedure failed"
     result.resource_log = res_log
-    result.cmds = cmds
+    result.cmds = cmd_history
     result.out_log = out_log
     result.err_log = err_log
 

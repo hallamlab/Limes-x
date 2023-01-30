@@ -47,12 +47,10 @@ class Params:
         file_system_wait_sec: int=5,
         threads: int=4,
         mem_gb: int=8,
-        echo_stdout: bool=False
     ) -> None:
         self.file_system_wait_sec = file_system_wait_sec
         self.threads = threads
         self.mem_gb = mem_gb
-        self.echo_stdout = echo_stdout
 
     def Copy(self):
         cp = Params(**self.__dict__)
