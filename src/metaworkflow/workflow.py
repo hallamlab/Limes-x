@@ -477,5 +477,6 @@ class Workflow:
             os.makedirs(workspace, exist_ok=True)
             os.chdir(workspace)
             _run_in_workspace()
+            print("completed")
         finally:
             os.chdir(original_dir)
