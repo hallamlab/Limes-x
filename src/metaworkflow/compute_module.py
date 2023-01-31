@@ -7,7 +7,7 @@ from typing import Callable, Iterable, Any, Literal
 import json
 import inspect
 
-# from .solver import Transform
+from .solver import Transform
 from .common.utils import AutoPopulate, PrivateInit
 
 # different instances can have differing "group_by"
@@ -74,7 +74,7 @@ class JobContext(AutoPopulate):
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
-    manifest: dict[Item, Path|list[Path]]
+    manifest: dict[Item, Path]|dict[Item, list[Path]]
     job_id: str
     run_before: str
     run_after: str
@@ -245,7 +245,7 @@ class ComputeModule(PrivateInit):
         except NameError:
             HERE = os.getcwd()
         templates = f'{HERE}/compute_module_template/'
-        shutil.copytree(templates, module_root, ignore=shutil.ignore_patterns("__*__.py", "__pycache__", ".*"))
+        shutil.copytree(templates, module_root, ignore=shutil.ignore_patterns("_*", ".*"))
         for path, dirs, files in os.walk(module_root):
             for f in files:
                 os.chmod(os.path.join(path, f), 0o775)
@@ -275,3 +275,14 @@ class ComputeModule(PrivateInit):
         py_path = "/".join(_get_path(metaworkflow).split("/")[:-1])
         entry_path = Path(_get_path(compute_module_template)).joinpath("__main__.py")
         return f'python {entry_path} {self.location} {workspace} {output_folder} {py_path}'
+
+    def GetTransform(self):
+        if Transform.Exists(self.name):
+            return Transform.Get(self.name)
+        else:
+            return Transform.Create(
+                {x.key for x in self.inputs},
+                {x.key for x in self.outputs},
+                unique_name=self.name,
+                reference=self,
+            )

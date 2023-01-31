@@ -7,7 +7,7 @@ import uuid
 from threading import Thread, Condition
 from multiprocessing import Queue
 
-# from .solver import DependencySolver
+from .solver import DependencySolver
 from .common.utils import PrivateInit
 from .compute_module import Item, ComputeModule, Params, JobContext, JobResult
 from .executors import Executor, JobInstance, ItemInstance
@@ -102,7 +102,6 @@ class WorkflowState(PrivateInit):
             given = set(serialized_state["given"])
             todo_items = _flatten(serialized_state["item_instances"])
             todo_jobs = _flatten(serialized_state["module_executions"])
-            job_ids = set(id for _, id, _ in todo_jobs) 
             job_outputs: dict[str, dict] = {}
 
             while len(todo_items)>0 or len(todo_jobs)>0:
@@ -378,22 +377,24 @@ class Sync:
             return results
 
 class Workflow:
+    INPUT_DIR = Path("inputs")
     def __init__(self, compute_modules: list[ComputeModule]|Path|str) -> None:
         if isinstance(compute_modules, Path) or isinstance(compute_modules, str):
-            modules_dir = Path(compute_modules)
             compute_modules = ComputeModule.LoadSet(compute_modules)
 
         self._compute_modules = compute_modules
-        # self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
+        self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
 
-    # def _calculate(self, given: Iterable[Item], targets: Iterable[Item]):
-    #     given_k = {x.key for x in given}
-    #     targets_k = {x.key for x in targets} 
-    #     steps, dep_map = self._solver.Solve(given_k, targets_k)
-    #     return steps, dep_map
+    def _calculate(self, given: Iterable[Item], targets: Iterable[Item]):
+        given_k = {x.key for x in given}
+        targets_k = {x.key for x in targets} 
+        steps, dep_map = self._solver.Solve(given_k, targets_k)
+        return steps, dep_map
 
     # this just does setup, _run actually executes the compute modules
-    def Run(self, workspace: str|Path, targets: Iterable[Item], given: dict[Item, str|Path|list[str]|list[Path]], executor: Executor, params: Params=Params()):
+    def Run(self, workspace: str|Path, targets: Iterable[Item],
+        given: dict[Item, str]|dict[Item, Path]|dict[Item, list[str]]|dict[Item, list[Path]],
+        executor: Executor, params: Params=Params()):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
@@ -421,7 +422,7 @@ class Workflow:
 
         def _run_in_workspace():
             # make links for inputs in workspace
-            input_dir = Path("./inputs")
+            input_dir = self.INPUT_DIR
             os.makedirs(input_dir, exist_ok=True)
             inputs: dict[Item, list[Path]] = {}
             for item, paths in abs_given.items():
@@ -432,7 +433,11 @@ class Workflow:
                     os.symlink(p, linked)
                     links.append(linked)
                 inputs[item] = links
-            state = WorkflowState.ResumeIfPossible('./', self._compute_modules, inputs)
+            steps, _ = self._calculate(inputs, targets)
+            if steps is False:
+                print(f'no solution exists')
+                return
+            state = WorkflowState.ResumeIfPossible('./', [s.reference for s in steps], inputs)
             state.Save()
 
             if len(state.GetPendingJobs()) == 0:

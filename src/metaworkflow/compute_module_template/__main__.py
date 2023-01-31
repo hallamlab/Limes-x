@@ -4,19 +4,10 @@ import json
 from datetime import datetime as dt
 
 if __name__ == '__main__':
-    _paths: list = list(sys.argv[1:])
-    assert len(_paths) == 4
-    MODULE_PATH, WORKSPACE, relative_output_path = [Path(p) for p in _paths[:3]]
-    PYTHONPATH = str(_paths[3])
-    sys.path = list(set(sys.path + PYTHONPATH.split(':')))
 
-    from metaworkflow.compute_module import ComputeModule, JobResult, JobContext
+    from _receiver import THIS_MODULE, CONTEXT, WORKSPACE, RELATIVE_OUTPUT_PATH
     from metaworkflow.common.utils import LiveShell
-    # from metaworkflow.telemetry import ResourceMonitor
-
-    CONTEXT = JobContext.LoadFromDisk(WORKSPACE.joinpath(relative_output_path))
-    # MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])
-    THIS_MODULE = ComputeModule._load(MODULE_PATH)
+    from metaworkflow.compute_module import JobResult
 
     cmd_history = []
     err_log, out_log = [], []
@@ -46,7 +37,7 @@ if __name__ == '__main__':
         return code
 
     CONTEXT.shell = _shell
-    CONTEXT.output_folder = relative_output_path
+    CONTEXT.output_folder = RELATIVE_OUTPUT_PATH
 
     os.chdir(WORKSPACE)
     # monitor = ResourceMonitor(relative_output_path)
@@ -64,7 +55,7 @@ if __name__ == '__main__':
     result.out_log = out_log
     result.err_log = err_log
 
-    result_path = relative_output_path.joinpath('result.json')
+    result_path = RELATIVE_OUTPUT_PATH.joinpath('result.json')
     with open(result_path, 'w') as j:
         d = result.ToDict()
         json.dump(d, j, indent=4)
