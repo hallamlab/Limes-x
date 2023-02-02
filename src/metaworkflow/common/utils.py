@@ -27,7 +27,7 @@ class AutoPopulate:
             else:
                 setattr(self, k, None)
 
-def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[[str], None]|None=None, echo_cmd: bool=True) -> int:
+def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[[str], None]|None=None, echo_cmd: bool=True):
     class _Pipe:
         def __init__(self, io:IO[bytes]|None, lock: Condition=Condition(), q: Queue=Queue()) -> None:
             assert io is not None
@@ -42,11 +42,6 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
             cb(msg)
 
     ENCODING = 'utf-8'
-
-    # if isinstance(cmd, str):
-    #     cmd = [cmd]
-    # cmd = [c.strip() for c in cmd]
-
     process = subprocess.Popen(
         cmd,
         shell=True,
@@ -55,14 +50,6 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
         stderr=subprocess.PIPE,
     )
 
-    # first = True
-    # last_process = None
-    # for c in cmd:
-    #     p = subprocess.Popen(c, shell=True)
-        
-    #     first = False
-
-    # callback(onOut, f'{" | ".join(cmd)}\n')
     if echo_cmd: callback(onOut, f'{cmd}\n')
     _in, _out, _err = [_Pipe(io) for io in [process.stdin, process.stdout, process.stderr]]
     _process = process
@@ -87,6 +74,8 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
 
     _process.wait()
     code = _process.poll()
+    for w in workers:
+        w.join()
     if code is None: code = 1
     return code
 

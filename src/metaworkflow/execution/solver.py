@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Literal, Any
 import uuid
 
-from .common.utils import PrivateInit
+from ..common.utils import PrivateInit
 
 class Transform(PrivateInit):
     _last_i = 0

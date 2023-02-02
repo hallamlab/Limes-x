@@ -5,10 +5,9 @@ import shutil
 import importlib
 from typing import Callable, Iterable, Any, Literal
 import json
-import inspect
 
 from .solver import Transform
-from .common.utils import AutoPopulate, PrivateInit
+from ..common.utils import AutoPopulate, PrivateInit
 
 # different instances can have differing "group_by"
 # depending on parent compute module!
@@ -74,7 +73,7 @@ class JobContext(AutoPopulate):
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
-    manifest: dict[Item, Path]|dict[Item, list[Path]]
+    manifest: dict[Item, Path|list[Path]]
     job_id: str
     run_before: str
     run_after: str
@@ -155,6 +154,7 @@ class ModuleExistsError(FileExistsError):
     pass
 
 class ComputeModule(PrivateInit):
+    DEFINITION_FILE_NAME = 'definition.py'
     def __init__(self,
         procedure: Callable[[JobContext], JobResult],
         inputs: set[Item],
@@ -196,7 +196,7 @@ class ComputeModule(PrivateInit):
 
         err_msg = f"module [{name}] at [{folder_path}] appears to be corrupted"
         assert os.path.exists(folder_path), err_msg
-        assert os.path.isfile(folder_path.joinpath("definition.py")), err_msg
+        assert os.path.isfile(folder_path.joinpath(cls.DEFINITION_FILE_NAME)), err_msg
         # assert os.path.isfile(folder_path.joinpath("__main__.py")), err_msg
         original_path = sys.path
         # os.chdir(folder_path.joinpath('..'))
@@ -205,52 +205,13 @@ class ComputeModule(PrivateInit):
             import definition as mo # type: ignore
             importlib.reload(mo)
 
-            _procdure, ins, outs = mo.Procedure, mo.INPUTS, mo.OUTPUTS
-            assert callable(_procdure)
-            module = ComputeModule(
-                _procdure,
-                set(ins), set(outs),
-                location=folder_path,
-                name=name,
-                _key=cls._initializer_key
-            )
+            module: ComputeModule = mo.MODULE
 
             return module
         except ImportError:
             raise ImportError(err_msg)
         finally:
             sys.path = original_path
-
-    @classmethod
-    def GenerateTemplate(cls, 
-        modules_folder: str|Path,
-        name: str,
-        on_exist: Literal['error']|Literal['overwrite']|Literal['skip']='error'):
-        modules_folder = Path(modules_folder)
-
-        name = name.replace('/', '_').replace(' ', '-')
-        module_root = Path.joinpath(modules_folder, name)
-
-        if os.path.exists(module_root):
-            if on_exist=='overwrite':
-                shutil.rmtree(module_root, ignore_errors=True)
-            elif on_exist=='error':
-                raise ModuleExistsError(f"module [{name}] already exists at [{modules_folder}]")
-            elif on_exist=='skip':
-                print(f'module [{name}] already exits! skipping...')
-                return cls._load(module_root)
-
-        try:
-            HERE = '/'.join(os.path.realpath(__file__).split('/')[:-1])
-        except NameError:
-            HERE = os.getcwd()
-        templates = f'{HERE}/compute_module_template/'
-        shutil.copytree(templates, module_root, ignore=shutil.ignore_patterns("_*", ".*"))
-        for path, dirs, files in os.walk(module_root):
-            for f in files:
-                os.chmod(os.path.join(path, f), 0o775)
-
-        return cls._load(module_root)
 
     def __repr__(self) -> str:
         return f'<m:{self.name}>'
@@ -265,17 +226,7 @@ class ComputeModule(PrivateInit):
     def GetUnmaskedOutputs(self):
         return self.outputs - self.output_mask
 
-    def GenerateStaticRunCommand(self, workspace: Path, output_folder: Path):
-        import metaworkflow
-        from metaworkflow import compute_module_template
-
-        def _get_path(mod):
-            return os.path.abspath(os.path.dirname(inspect.getfile(mod)))
-
-        py_path = "/".join(_get_path(metaworkflow).split("/")[:-1])
-        entry_path = Path(_get_path(compute_module_template)).joinpath("__main__.py")
-        return f'python {entry_path} {self.location} {workspace} {output_folder} {py_path}'
-
+    # this is getting outdated
     def GetTransform(self):
         if Transform.Exists(self.name):
             return Transform.Get(self.name)
@@ -286,3 +237,90 @@ class ComputeModule(PrivateInit):
                 unique_name=self.name,
                 reference=self,
             )
+
+class ModuleBuilder:
+    _groupings: dict[Item, Item]
+    _inputs: set[Item]
+    _outputs: set[Item]
+    _location: Path
+    _name: str
+
+    def __init__(self) -> None:
+        self._groupings = {}
+        self._inputs = set()
+        self._outputs = set()
+
+    def SetProcedure(self, procedure: Callable[[JobContext], JobResult]):
+        self._procedure = procedure
+        return self
+
+    def AddInput(self, input: Item, groupby: Item|None=None):
+        assert input not in self._inputs, f"{input} already added"
+        self._inputs.add(input)
+        if groupby is not None:
+            self._groupings[input] = groupby
+        return self
+
+    def PromiseOutput(self, output: Item):
+        assert output not in self._outputs, f"{output} already added"
+        self._outputs.add(output)
+        return self
+
+    def SetHome(self, definition_file: str, name: str|None=None):
+        def_path = Path(definition_file)
+        assert def_path.exists(), f"{def_path} doesn't exist"
+        toks = definition_file.split('/')
+        assert toks[-1] == ComputeModule.DEFINITION_FILE_NAME, f"the module's definition file must be named {ComputeModule.DEFINITION_FILE_NAME}"
+        if name is None:
+            assert len(toks)>=2 and toks[-2] != "", f"can't infer name from {def_path}"
+            name = toks[-2]
+        self._name = name
+        self._location = Path(os.path.abspath(def_path.joinpath('..')))
+        return self
+
+    def Build(self):
+        assert len(self._outputs) > 0, f"module has no outputs and so is not useful"
+        cm = ComputeModule(
+            _key=ComputeModule._initializer_key,
+            procedure=self._procedure,
+            inputs=self._inputs,
+            outputs=self._outputs,
+            location=self._location,
+            name=self._name,
+        )
+        return cm
+
+    @classmethod
+    def GenerateTemplate(cls, 
+        modules_folder: str|Path,
+        name: str,
+        on_exist: Literal['error']|Literal['overwrite']|Literal['skip']='error'):
+        modules_folder = Path(modules_folder)
+
+        name = name.replace('/', '_').replace(' ', '-')
+        module_root = Path.joinpath(modules_folder, name)
+
+        if os.path.exists(module_root):
+            if on_exist=='overwrite':
+                shutil.rmtree(module_root, ignore_errors=True)
+                os.makedirs(module_root)
+            elif on_exist=='error':
+                raise ModuleExistsError(f"module [{name}] already exists at [{modules_folder}]")
+            elif on_exist=='skip':
+                print(f'module [{name}] already exits! skipping...')
+                return ComputeModule._load(module_root)
+        else:
+            os.makedirs(module_root)
+
+        try:
+            HERE = Path('/'.join(os.path.realpath(__file__).split('/')[:-1]))
+        except NameError:
+            HERE = Path(os.getcwd())
+        
+        template_file_name = 'template_module_definition.py'
+        shutil.copy(HERE.joinpath(template_file_name), module_root.joinpath(ComputeModule.DEFINITION_FILE_NAME))
+        for path, dirs, files in os.walk(module_root):
+            for f in files:
+                os.chmod(os.path.join(path, f), 0o775)
+
+        return ComputeModule._load(module_root)

@@ -7,10 +7,12 @@ import uuid
 from threading import Thread, Condition
 from multiprocessing import Queue
 
-from .solver import DependencySolver
+from .execution.solver import DependencySolver
 from .common.utils import PrivateInit
-from .compute_module import Item, ComputeModule, Params, JobContext, JobResult
-from .executors import Executor, JobInstance, ItemInstance
+# from .compute_module import Item, ComputeModule, Params, JobContext, JobResult
+from .execution.instances import JobInstance, ItemInstance
+from .execution.modules import ComputeModule, Item, JobContext, JobResult, Params
+from .execution.executors import Executor
 
 class JobError(Exception):
      def __init__(self, message=""):
@@ -154,7 +156,7 @@ class WorkflowState(PrivateInit):
     def MakeNew(cls, workspace: str|Path, steps: list[ComputeModule], given: dict[Item, list[Path]]):
         assert len({m.name for m in steps})==len(steps), f"duplicate compute module name"
         state = WorkflowState(workspace, steps, _key=cls._initializer_key)
-        for ii in [ItemInstance(state._gen_id, i.key, p) for i, ps in given.items() for p in ps]:
+        for ii in [ItemInstance(state._gen_id, i, p) for i, ps in given.items() for p in ps]:
             state._register_item_inst(ii)
             state._given_item_instances.append(ii.GetID())
 
@@ -350,7 +352,7 @@ class WorkflowState(PrivateInit):
             if not isinstance(paths, list): paths = [paths]
             insts = []
             for path in paths:
-                inst = ItemInstance(self._gen_id, item.key, path, made_by=job_inst)
+                inst = ItemInstance(self._gen_id, item, path, made_by=job_inst)
                 self._register_item_inst(inst)
                 insts.append(inst)
             outs[item.key] = insts if len(insts)>1 else insts[0]
@@ -452,10 +454,9 @@ class Workflow:
                 for job in pending_jobs:
                     jid = job.GetID()
                     if jid in jobs_ran: continue
-                    c = job.CreateContext(params)
                     header = f"{job.step.name} [{jid}]"
                     print(f"\nstarting {header} {'>'*(50-len(header))}")
-                    _run_job_async(lambda: executor.Run(workspace, job, c))
+                    _run_job_async(lambda: executor.Run(job, workspace, params))
                     jobs_ran[jid] = job
 
                 try:
@@ -477,6 +478,6 @@ class Workflow:
             os.makedirs(workspace, exist_ok=True)
             os.chdir(workspace)
             _run_in_workspace()
-            print("completed")
+            print("done")
         finally:
             os.chdir(original_dir)
