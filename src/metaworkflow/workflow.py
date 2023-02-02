@@ -61,9 +61,9 @@ class WorkflowState(PrivateInit):
             ins = []
             for i in m.inputs:
                 d = {"item": i.key}
-                if i.group_by is not None: d["group_by"] = i.group_by.key
                 ins.append(d)
             md["in"] = ins
+            md["input_groups"] = dict((k.key, v.key) for k, v in m._group_by.items())
             md["out"] = [i.key for i in m.outputs]
             if len(m.output_mask)>0: md["unused_out"] = [i.key for i in m.output_mask]
             modules[m.name] = md
@@ -91,7 +91,7 @@ class WorkflowState(PrivateInit):
             serialized_state = json.load(j)
 
             for name, md in serialized_state["modules"].items():
-                ins = {Item(i["item"], group_by=i.get("group_by")) for i in md["in"]}
+                ins = {Item(i["item"]) for i in md["in"]}
                 outs = {Item(i) for i in md["out"]}
                 cm = cm_ref[name]
                 assert cm.inputs == ins
@@ -309,11 +309,12 @@ class WorkflowState(PrivateInit):
                     outer_continue = True
                     break
                 have_array = len(instances)>1
-                want_array = item.group_by is not None
+                item_grouped_by = module.Grouped(item)
+                want_array = item_grouped_by is not None
                     
                 ## join & group by ##
-                if item.group_by is not None:
-                    groups = self._group_by(item_name, item.group_by.key)
+                if want_array:
+                    groups = self._group_by(item_name, item_grouped_by.key)
                     for k in list(groups):
                         grp = groups[k]
                         rep = next(iter(grp))

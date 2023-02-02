@@ -9,14 +9,6 @@ import json
 from .solver import Transform
 from ..common.utils import AutoPopulate, PrivateInit
 
-# different instances can have differing "group_by"
-# depending on parent compute module!
-# 
-# Items really shouldn't have group by
-# this is a property of the compute module's input...
-# 
-# ItemInstances use the string key to circumvent
-# possible incosistencies due to this
 class Item:
     _hashes: dict[str, int] = {}
     _last_hash = 0
@@ -24,9 +16,8 @@ class Item:
     def __repr__(self) -> str:
         return f'<i:{self.key}>'
 
-    def __init__(self, key: str, group_by: Item|None = None) -> None:
+    def __init__(self, key: str) -> None:
         self.key = key
-        self.group_by = group_by
         if key in Item._hashes:
             self._hash = Item._hashes[key]
         else:
@@ -155,9 +146,11 @@ class ModuleExistsError(FileExistsError):
 
 class ComputeModule(PrivateInit):
     DEFINITION_FILE_NAME = 'definition.py'
+    _group_by: dict[Item, Item]
     def __init__(self,
         procedure: Callable[[JobContext], JobResult],
         inputs: set[Item],
+        group_by: dict[Item, Item],
         outputs: set[Item],
         location: str|Path,
         name: str|None = None,
@@ -169,10 +162,14 @@ class ComputeModule(PrivateInit):
         assert self.name != ""
         assert len(inputs.intersection(outputs)) == 0
         self.inputs = inputs
+        self._group_by = group_by
         self.outputs = outputs
         self._procedure = procedure
         self.location = Path(location).absolute()
         self.output_mask: set[Item] = set()
+
+    def Grouped(self, item: Item):
+        return self._group_by.get(item)
 
     @classmethod
     def LoadSet(cls, modules_path: str|Path):
@@ -284,6 +281,7 @@ class ModuleBuilder:
             _key=ComputeModule._initializer_key,
             procedure=self._procedure,
             inputs=self._inputs,
+            group_by=self._groupings,
             outputs=self._outputs,
             location=self._location,
             name=self._name,
