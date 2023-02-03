@@ -4,19 +4,13 @@ import json
 from datetime import datetime as dt
 
 if __name__ == '__main__':
-    _paths: list = list(sys.argv[1:])
-    assert len(_paths) == 3, f"{_paths}"
-    MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH = [Path(p) for p in _paths[:3]]
-    # PYTHONPATH = _paths[3]
-    # sys.path = list(set(sys.path + PYTHONPATH.split(':')))
-
+    HERE = os.path.dirname(__file__)
+    os.chdir(HERE)
+    from _setup import ParseArgs
+    e = ParseArgs()
+    MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module
     from metaworkflow.common.utils import LiveShell
-    from metaworkflow.execution.modules import JobResult, ComputeModule, JobContext
-    # from metaworkflow.telemetry import ResourceMonitor
-
-    CONTEXT = JobContext.LoadFromDisk(WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH))
-    # MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])
-    THIS_MODULE = ComputeModule._load(MODULE_PATH)
+    from metaworkflow.execution.modules import JobResult
 
     cmd_history = []
     err_log, out_log = [], []

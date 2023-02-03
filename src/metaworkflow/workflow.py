@@ -6,6 +6,7 @@ import json
 import uuid
 from threading import Thread, Condition
 from multiprocessing import Queue
+import signal
 
 from .execution.solver import DependencySolver
 from .common.utils import PrivateInit
@@ -364,20 +365,35 @@ class Sync:
         self.lock = Condition()
         self.queue = Queue()
 
-    def PushNotify(self, item: JobResult):
+    def PushNotify(self, item: JobResult|None=None):
         with self.lock:
-            self.queue.put_nowait(item)
+            print('push')
+            self.queue.put(item)
             self.lock.notify()
 
-    def WaitAll(self) -> list[JobResult]:
+    def WaitAll(self) -> list[JobResult|None]:
         with self.lock:
             if self.queue.empty():
+                print('wait')
                 self.lock.wait()
 
             results = []
             while not self.queue.empty():
-                results.append(self.queue.get_nowait())
+                print('get')
+                results.append(self.queue.get(block=True))
             return results
+
+class TerminationWatcher:
+  kill_now = False
+  def __init__(self, sync: Sync):
+    signal.signal(signal.SIGINT, self.exit_gracefully)
+    signal.signal(signal.SIGTERM, self.exit_gracefully)
+    self.sync = sync
+
+  def exit_gracefully(self, *args):
+    print('stop requested')
+    self.kill_now = True
+    self.sync.PushNotify()
 
 class Workflow:
     INPUT_DIR = Path("inputs")
@@ -408,16 +424,23 @@ class Workflow:
         abs_given = dict((k, [abs_path(p) for p in v] if isinstance(v, list) else [abs_path(v)]) for k, v in given.items())
 
         sync = Sync()
-        def _run_job_async(job: Callable[[], JobResult]):
+        watcher = TerminationWatcher(sync)
+        def _run_job_async(jobi: JobInstance, procedure: Callable[[], JobResult]):
             def _job():
                 try:
-                    result = job()
+                    print(1)
+                    result = procedure()
+                    print(2)
                 except Exception as e:
                     result = JobResult(
                         exit_code = 1,
-                        error_message = str(e)
+                        error_message = str(e),
+                        made_by = jobi.GetID(),
                     )
+
+                print(3)
                 sync.PushNotify(result)
+                print(4)
         
             th = Thread(target=_job)
             th.start()
@@ -448,25 +471,31 @@ class Workflow:
                 return
 
             jobs_ran: dict[str, JobInstance] = {}
-            while True:
+            while not watcher.kill_now:
                 pending_jobs = state.GetPendingJobs()
                 if len(pending_jobs) == 0: break
 
                 for job in pending_jobs:
+                    if watcher.kill_now:
+                        raise KeyboardInterrupt()
+
                     jid = job.GetID()
                     if jid in jobs_ran: continue
                     header = f"{job.step.name} [{jid}]"
                     print(f"\nstarting {header} {'>'*(50-len(header))}")
-                    _run_job_async(lambda: executor.Run(job, workspace, params))
+                    _run_job_async(job, lambda: executor.Run(job, workspace, params))
                     jobs_ran[jid] = job
 
                 try:
                     for result in sync.WaitAll():
+                        if result is None:
+                            raise KeyboardInterrupt()
                         if not result.error_message is None:
                             job_instance = jobs_ran[result.made_by]
                             print(f"job {job_instance.step.name}:{result.made_by} failed with msg: [{result.error_message}]")
                             return
                         else:
+                            print(jobs_ran[result.made_by].step.name, 'complete')
                             state.RegisterJobComplete(result.made_by, result.manifest)
                 except KeyboardInterrupt:
                     print("force stopped")
@@ -482,3 +511,4 @@ class Workflow:
             print("done")
         finally:
             os.chdir(original_dir)
+            return not watcher.kill_now

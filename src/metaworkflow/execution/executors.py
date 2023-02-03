@@ -44,8 +44,8 @@ class Executor:
             params = params,
         )
 
-        from . import reciever
-        entry_point = Path(os.path.abspath(inspect.getfile(reciever)))
+        from ..environments import local
+        entry_point = Path(os.path.abspath(inspect.getfile(local)))
         job.run_command = f"""\
             PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder}
@@ -114,12 +114,18 @@ class CloudExecutor(Executor):
             params = params,
         )
 
-        from . import reciever
-        entry_point = Path(os.path.abspath(inspect.getfile(reciever)))
-        job.run_command = f"""\
-            PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
+        # s, m = job.Shell(f"""\
+        #     /bin/bash -c "python /home/tony/workspace/python/grad/gene_centric_analysis_pipeline/scratch/cloud_compute/cloud_reciever.py \
+        #         tmp {job.run_command} \
+        #         && tar --skip-old-files -xf {job.context.output_folder}.tar.gz" \
+        # """.replace("  ", ""))
+
+        from ..environments import cloud
+        entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
+        run_cmd = f"""\
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder}
         """[:-1].replace("  ", "")
+        job.run_command = run_cmd
         success, msg = self.execute_procedure(job)
 
         return self._compile_result(job, success, msg)
