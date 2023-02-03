@@ -5,8 +5,8 @@ from typing import Callable, Iterable
 import json
 import uuid
 from threading import Thread, Condition
-from multiprocessing import Queue
 import signal
+from datetime import datetime as dt
 
 from .execution.solver import DependencySolver
 from .common.utils import PrivateInit
@@ -363,24 +363,20 @@ class WorkflowState(PrivateInit):
 class Sync:
     def __init__(self) -> None:
         self.lock = Condition()
-        self.queue = Queue()
+        self.queue = []
 
     def PushNotify(self, item: JobResult|None=None):
         with self.lock:
-            print('push')
-            self.queue.put(item)
+            self.queue.append(item)
             self.lock.notify()
 
     def WaitAll(self) -> list[JobResult|None]:
         with self.lock:
-            if self.queue.empty():
-                print('wait')
+            if len(self.queue)==0:
                 self.lock.wait()
 
-            results = []
-            while not self.queue.empty():
-                print('get')
-                results.append(self.queue.get(block=True))
+            results = self.queue.copy()
+            self.queue.clear()
             return results
 
 class TerminationWatcher:
@@ -423,24 +419,22 @@ class Workflow:
         abs_path = lambda p: Path(os.path.abspath(p))
         abs_given = dict((k, [abs_path(p) for p in v] if isinstance(v, list) else [abs_path(v)]) for k, v in given.items())
 
+        def _timestamp():
+            return f"{dt.now().strftime('%H:%M:%S')}>"
+
         sync = Sync()
         watcher = TerminationWatcher(sync)
         def _run_job_async(jobi: JobInstance, procedure: Callable[[], JobResult]):
             def _job():
                 try:
-                    print(1)
                     result = procedure()
-                    print(2)
                 except Exception as e:
                     result = JobResult(
                         exit_code = 1,
                         error_message = str(e),
                         made_by = jobi.GetID(),
                     )
-
-                print(3)
                 sync.PushNotify(result)
-                print(4)
         
             th = Thread(target=_job)
             th.start()
@@ -481,8 +475,8 @@ class Workflow:
 
                     jid = job.GetID()
                     if jid in jobs_ran: continue
-                    header = f"{job.step.name} [{jid}]"
-                    print(f"\nstarting {header} {'>'*(50-len(header))}")
+                    header = f"{_timestamp()} {job.step.name}:{jid}"
+                    print(f"{header} started {'>'*(50-len(header))}")
                     _run_job_async(job, lambda: executor.Run(job, workspace, params))
                     jobs_ran[jid] = job
 
@@ -490,12 +484,13 @@ class Workflow:
                     for result in sync.WaitAll():
                         if result is None:
                             raise KeyboardInterrupt()
+                        job_instance = jobs_ran[result.made_by]
+                        header = f"{_timestamp()} {job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
-                            job_instance = jobs_ran[result.made_by]
-                            print(f"job {job_instance.step.name}:{result.made_by} failed with msg: [{result.error_message}]")
+                            print(f"{header} failed with msg: [{result.error_message}]")
                             return
                         else:
-                            print(jobs_ran[result.made_by].step.name, 'complete')
+                            print(f"{header} completed")
                             state.RegisterJobComplete(result.made_by, result.manifest)
                 except KeyboardInterrupt:
                     print("force stopped")
