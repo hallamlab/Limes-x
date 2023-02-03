@@ -462,11 +462,11 @@ class Workflow:
                     os.symlink(p, linked)
                     links.append(linked)
                 inputs[item] = links
-            steps, dep_map = self._calculate(inputs, targets)
-            if steps is False:
+            _steps, dep_map = self._calculate(inputs, targets)
+            if _steps is False:
                 print(f'no solution exists')
                 return
-            steps = [s.reference for s in steps]
+            steps: list[ComputeModule] = [s.reference for s in _steps]
             self._check_feasible(steps, targets, dep_map)
             state = WorkflowState.ResumeIfPossible('./', steps, inputs)
             state.Save()
@@ -474,6 +474,8 @@ class Workflow:
             if len(state.GetPendingJobs()) == 0:
                 print(f'nothing to do')
                 return
+
+            print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
 
             executor.Prerun(self.INPUT_DIR, params)
 

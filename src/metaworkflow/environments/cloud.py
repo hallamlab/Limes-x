@@ -1,3 +1,4 @@
+import json
 import sys, os
 from pathlib import Path
 import uuid
@@ -38,10 +39,28 @@ if __name__ == '__main__':
     import metaworkflow.environments.local as env
     from metaworkflow.common.utils import LiveShell
 
+    cmd_history = []
+    err_log, out_log = [], []
+    def _shell(cmd: str):
+        lines = cmd.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line == "": continue
+            cmd_history.append(line)
+            def _on_io(s: str, log: list):
+                if s.endswith('\n'): s = s[:-1]
+                log.append(s)
+
+        LiveShell(
+            cmd, echo_cmd=False,
+            onOut=lambda s: _on_io(s, out_log),
+            onErr=lambda s: _on_io(s, err_log),
+        )
+
     # print(sys.argv, metaworkflow.__name__)
     lib_name = env.__name__
     module_name = str(MODULE_PATH).split('/')[-1]
-    LiveShell(f"""\
+    _shell(f"""\
         echo $(date) "setting up env"
         cp -r {MODULE_PATH} {CLOUD_LIB}/
         cd {CLOUD_WS}
@@ -49,7 +68,7 @@ if __name__ == '__main__':
         ls -lh
         echo $(date) "starting"
         python {env.__file__} {CLOUD_LIB}/{module_name} {CLOUD_WS} {RELATIVE_OUTPUT_PATH} \
-    """.replace("  ", ""), echo_cmd=False)
+    """.replace("  ", ""))
 
     BL = {
         'context.json',
@@ -57,11 +76,19 @@ if __name__ == '__main__':
     }
     outs = [f for f in os.listdir(RELATIVE_OUTPUT_PATH) if f not in BL]
     newline = '\n'
-    LiveShell(f"""\
+    _shell(f"""\
         echo $(date) "gathering results"
         cd {RELATIVE_OUTPUT_PATH}
         ls -lh
         {newline.join(f"tar -cf - {f} | pigz -5 -p {CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/{f}.tgz" for f in outs)}
-        cp result.json {Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/ \
         echo $(date) "done"
-    """.replace("  ", ""), echo_cmd=False)
+    """.replace("  ", ""))
+
+    result_json = 'result.json'
+    with open(RELATIVE_OUTPUT_PATH.joinpath(result_json)) as j:
+        res = json.load(j)
+        res['cloud-wrapper_commands'] = cmd_history
+        res['cloud-wrapper_out'] = out_log
+        res['cloud-wrapper_err'] = err_log
+        with open(WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath(result_json), 'w') as outj:
+            json.dump(res, outj, indent=4)

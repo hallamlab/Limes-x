@@ -57,7 +57,7 @@ if __name__ == '__main__':
             result.error_message = err
     # result.resource_log = res_log
     result.resource_log = []
-    result.cmds = cmd_history
+    result.commands = cmd_history
     result.out_log = out_log
     result.err_log = err_log
 

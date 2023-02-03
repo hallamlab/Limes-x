@@ -109,7 +109,7 @@ class JobContext(AutoPopulate):
             return JobContext(**kwargs)
 
 class JobResult(AutoPopulate):
-    cmds: list[str]
+    commands: list[str]
     error_message: str|None
     made_by: str
     manifest: dict[Item, Path|list[Path]]
