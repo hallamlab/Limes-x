@@ -4,8 +4,8 @@ import json
 from datetime import datetime as dt
 
 if __name__ == '__main__':
-    HERE = os.path.dirname(__file__)
-    os.chdir(HERE)
+    SRC = os.path.abspath(Path(__file__).joinpath('../../..'))
+    sys.path = list(set([SRC]+sys.path))
     from _setup import ParseArgs
     e = ParseArgs()
     MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module
@@ -15,7 +15,6 @@ if __name__ == '__main__':
     cmd_history = []
     err_log, out_log = [], []
     def _shell(cmd: str):
-
         lines = cmd.split('\n')
         code = 0
         for line in lines:
@@ -64,6 +63,19 @@ if __name__ == '__main__':
         else:
             relative = Path(os.path.abspath(paths)).relative_to(WORKSPACE)
         result.manifest[k] = relative
+
+    err_msg = None
+    try:
+        for ps in result.manifest.values():
+            _break = False
+            for p in ps if isinstance(ps, list) else [ps]:
+                if os.path.exists(p): continue
+                result.error_message = f'promised output at [{p}] missing'
+                _break = True
+                break
+            if _break: break
+    except Exception as e:
+        err_msg = f'result manifest corrupted'
 
     result_path = RELATIVE_OUTPUT_PATH.joinpath('result.json')
     with open(result_path, 'w') as j:

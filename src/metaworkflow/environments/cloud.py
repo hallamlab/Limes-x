@@ -2,55 +2,60 @@ import sys, os
 from pathlib import Path
 import uuid
 
-MODULE_TEMPLATE_PATH = Path("/".join(sys.argv[3].split("/")[:-1]))
-TMP_NAME = sys.argv[2]
-original_path = sys.path.copy()
-sys.path = list(set([str(MODULE_TEMPLATE_PATH)] + sys.path))
-sys.argv = sys.argv[3:]
-from _receiver import MODULE_PATH, CONTEXT, WORKSPACE, RELATIVE_OUTPUT_PATH, PYTHONPATH # type:ignore
-from metaworkflow.execution.executors import JobContext
+if __name__ == '__main__':
+    TMP_NAME = sys.argv.pop()
+    TMP = Path(os.environ.get(TMP_NAME, '/tmp'))
+    LIB = sys.argv.pop()
+    # TMP = Path("/home/phyberos/project-rpp/gene_centric_analysis_pipeline/scratch/cloud_compute/cache/tmp")
+    
+    CLOUD_SPACE: Path|None = None
+    while CLOUD_SPACE is None or CLOUD_SPACE.exists():
+        CLOUD_SPACE = TMP.joinpath(f'metaworkflow-{uuid.uuid4().hex}')
+    CLOUD_WS = CLOUD_SPACE.joinpath('workspace')
+    CLOUD_LIB = CLOUD_SPACE.joinpath('lib')
+    os.makedirs(CLOUD_WS)
+    os.chdir(CLOUD_WS)
+    os.system(f'mkdir -p {CLOUD_LIB} && tar -hxf {LIB} -C {CLOUD_LIB}')
 
-_CONTEXT: JobContext = CONTEXT
-_WORKSPACE: Path = WORKSPACE
-_RELATIVE_OUTPUT_PATH: Path = RELATIVE_OUTPUT_PATH
+    sys.path = list(set([str(CLOUD_LIB)]+sys.path))
+    from _setup import ParseArgs
+    e = ParseArgs(sys.path)
+    MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module
+    os.makedirs(RELATIVE_OUTPUT_PATH)
 
-# TMP = Path(os.environ.get(TMP_NAME, '/tmp'))
-# TMP = Path("/home/phyberos/project-rpp/gene_centric_analysis_pipeline/scratch/cloud_compute/cache/tmp")
-TMP = Path("/home/tony/workspace/python/grad/gene_centric_analysis_pipeline/scratch/cloud_compute/cache/tmp")
-CLOUD_SPACE: Path|None = None
-while CLOUD_SPACE is None or CLOUD_SPACE.exists():
-    CLOUD_SPACE = TMP.joinpath(f'{uuid.uuid4().hex}')
-CLOUD_WS = CLOUD_SPACE.joinpath('workspace')
-os.makedirs(CLOUD_WS)
-os.chdir(CLOUD_WS)
+    unzipped = set()
+    for item, ps in CONTEXT.manifest.items():
+        if not isinstance(ps, list): ps = [ps]
+        for p in ps:
+            toks = str(p).split('/')
+            folder = toks[0]
+            output = '/'.join(toks[:2])
+            if not os.path.exists(folder): os.makedirs(folder)
+            if output in unzipped: continue
+            os.system(f"cd {folder} && tar -hxf {WORKSPACE.joinpath(f'{output}.tgz')}")
+            unzipped.add(output)
 
-# tars are of the entire run folder (like ws/echo--hexhex)
-def _decompress(src: Path):
-    os.system(f"tar -xf {src} -C .")
+    import metaworkflow.environments.local as env
+    from metaworkflow.common.utils import LiveShell
 
-for item, ps in _CONTEXT.manifest.items():
-    if not isinstance(ps, list): ps = [ps]
-    for p in ps:
-        folder = "/".join(str(p).split('/')[:-1])
-        if os.path.exists(folder): continue
-        _decompress(_WORKSPACE.joinpath(f"{folder}.tar.gz"))
+    # print(sys.argv, metaworkflow.__name__)
+    lib_name = env.__name__
+    module_name = str(MODULE_PATH).split('/')[-1]
+    LiveShell(f"""\
+        cp -r {MODULE_PATH} {CLOUD_LIB}/
+        cd {CLOUD_WS}
+        cp {WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH)}/*.json {RELATIVE_OUTPUT_PATH}/
+        python {env.__file__} {CLOUD_LIB}/{module_name} {CLOUD_WS} {RELATIVE_OUTPUT_PATH} \
+    """.replace("  ", ""), echo_cmd=False)
 
-import metaworkflow
-lib_src = "/".join(metaworkflow.__file__.split("/")[:-1])
-
-# print(sys.argv, metaworkflow.__name__)
-lib_name = metaworkflow.__name__
-lib_dir = CLOUD_SPACE.joinpath(f"lib/")
-module_name = str(MODULE_PATH).split('/')[-1]
-os.makedirs(_RELATIVE_OUTPUT_PATH)
-os.makedirs(lib_dir)
-os.system(f"""\
-    cd {CLOUD_SPACE}
-    cp -r {os.path.realpath(lib_src)} {lib_dir}/
-    cp -r {os.path.realpath(MODULE_PATH)} {lib_dir}/
-    rm -r {lib_dir}/*/__pycache__
-    cd {CLOUD_WS}
-    cp {_WORKSPACE.joinpath(_RELATIVE_OUTPUT_PATH)}/*.json {_RELATIVE_OUTPUT_PATH}/
-    python {lib_dir}/{lib_name}/compute_module_template {lib_dir}/{module_name} {CLOUD_WS} {_RELATIVE_OUTPUT_PATH} {PYTHONPATH} \
-        && tar -cf - {_RELATIVE_OUTPUT_PATH} | pigz -5 -p {_CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(_RELATIVE_OUTPUT_PATH)}.tar.gz \
-""".replace("  ", ""))
+    BL = {
+        'context.json',
+        'result.json'
+    }
+    outs = [f for f in os.listdir(RELATIVE_OUTPUT_PATH) if f not in BL]
+    newline = '\n'
+    LiveShell(f"""\
+        cd {RELATIVE_OUTPUT_PATH}
+        {newline.join(f"tar -cf - {f} | pigz -5 -p {CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/{f}.tgz" for f in outs)}
+        cp result.json {Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/ \
+    """.replace("  ", ""), echo_cmd=False)

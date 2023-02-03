@@ -34,8 +34,12 @@ class Job:
 
 ExecutionHandler = Callable[[Job], tuple[bool, str]]
 class Executor:
-    def __init__(self, execute_procedure: ExecutionHandler|None=None) -> None:
-        self.execute_procedure: ExecutionHandler = execute_procedure if execute_procedure is not None else lambda j: j.Shell(j.run_command)
+    def __init__(self, execute_procedure: ExecutionHandler|None=None, prerun: Callable[[Path, Params], None]|None=None) -> None:
+        self._execute_procedure: ExecutionHandler = execute_procedure if execute_procedure is not None else lambda j: j.Shell(j.run_command)
+        self._prerun = (lambda x, y: None) if prerun is None else prerun
+
+    def Prerun(self, inputs_folder: Path, params: Params):
+        self._prerun(inputs_folder, params)
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
         job = Job(
@@ -50,7 +54,7 @@ class Executor:
             PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder}
         """[:-1].replace("  ", "")
-        success, msg = self.execute_procedure(job)
+        success, msg = self._execute_procedure(job)
 
         return self._compile_result(job, success, msg)
 
@@ -74,15 +78,6 @@ class Executor:
                 with open(result_json) as j:
                     r = JobResult.FromDict(json.load(j))
                     r.made_by = job.GetID()
-
-                    for ps in r.manifest.values():
-                        _break = False
-                        for p in ps if isinstance(ps, list) else [ps]:
-                            if os.path.exists(p): continue
-                            r.error_message = f'promised output at [{p}] missing'
-                            _break = True
-                            break
-                        if _break: break
                     return r
             except Exception as e:
                 err_msg = f'result manifest corrupted'
@@ -92,7 +87,7 @@ class Executor:
 
         r = JobResult()
         r.made_by = job.GetID()
-        if not err_msg is None:
+        if err_msg is not None:
             if err_msg[-1] == '\n': err_msg = err_msg[:-1]
             r.error_message = err_msg
         return r
@@ -104,8 +99,34 @@ class Executor:
         return r
 
 class CloudExecutor(Executor):
-    def __init__(self, execute_procedure: ExecutionHandler|None=None) -> None:
-        super().__init__(execute_procedure)
+    def __init__(self, zipped_inputs: Path|None=None, execute_procedure: ExecutionHandler | None = None, prerun: Callable[[Path], None] | None = None) -> None:
+        def _prerun(inputs_dir: Path, params: Params):
+            def _remove_tar_ext(f: str):
+                exts = '.tgz .tar.gz'.split(' ')
+                for ext in exts:
+                    if f.endswith(ext): f = f[:-len(ext)]
+                return f
+
+            zipped = dict((_remove_tar_ext(f), f) for f in os.listdir(zipped_inputs)) if zipped_inputs is not None else {}
+            to_zip = [f for f in os.listdir('inputs') if f not in zipped]
+            to_link = [zipped[f] for f in os.listdir('inputs') if f in zipped]
+
+            if zipped_inputs is not None:
+                for f in to_link:
+                    os.symlink(zipped_inputs.joinpath(f), f'inputs/{f}')
+
+            import metaworkflow
+            src = os.path.abspath(Path(os.path.dirname(inspect.getfile(metaworkflow))).joinpath('..'))
+            here = os.getcwd()
+            newl = '\n'
+            LiveShell(f"""\
+                cd inputs
+                {newl.join(f"tar -hcf - {f} | pigz -5 -p {params.threads} >{f}.tgz" for f in to_zip)}
+                cd {src}
+                tar --exclude=__pycache__ -hcf - {metaworkflow.__name__} | pigz -5 -p {params.threads} >{here}/lib.tgz
+            """, echo_cmd=False)
+            if prerun is not None: prerun(inputs_dir)
+        super().__init__(execute_procedure, _prerun)
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
         job = Job(
@@ -114,18 +135,10 @@ class CloudExecutor(Executor):
             params = params,
         )
 
-        # s, m = job.Shell(f"""\
-        #     /bin/bash -c "python /home/tony/workspace/python/grad/gene_centric_analysis_pipeline/scratch/cloud_compute/cloud_reciever.py \
-        #         tmp {job.run_command} \
-        #         && tar --skip-old-files -xf {job.context.output_folder}.tar.gz" \
-        # """.replace("  ", ""))
-
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
-        run_cmd = f"""\
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder}
-        """[:-1].replace("  ", "")
-        job.run_command = run_cmd
-        success, msg = self.execute_procedure(job)
-
+        job.run_command  = f"""\
+            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {workspace.joinpath('lib.tgz')} SLURM_TMPDIR \
+        """.replace("  ", "")
+        success, msg = self._execute_procedure(job)
         return self._compile_result(job, success, msg)

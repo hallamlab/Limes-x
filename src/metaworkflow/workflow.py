@@ -464,6 +464,8 @@ class Workflow:
                 print(f'nothing to do')
                 return
 
+            executor.Prerun(self.INPUT_DIR, params)
+
             jobs_ran: dict[str, JobInstance] = {}
             while not watcher.kill_now:
                 pending_jobs = state.GetPendingJobs()
@@ -504,6 +506,8 @@ class Workflow:
             os.chdir(workspace)
             _run_in_workspace()
             print("done")
+        except Exception as e:
+            print(e)
         finally:
             os.chdir(original_dir)
             return not watcher.kill_now
