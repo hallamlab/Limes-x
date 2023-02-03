@@ -42,9 +42,12 @@ if __name__ == '__main__':
     lib_name = env.__name__
     module_name = str(MODULE_PATH).split('/')[-1]
     LiveShell(f"""\
+        echo $(date) "setting up env"
         cp -r {MODULE_PATH} {CLOUD_LIB}/
         cd {CLOUD_WS}
         cp {WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH)}/*.json {RELATIVE_OUTPUT_PATH}/
+        ls -lh
+        echo $(date) "starting"
         python {env.__file__} {CLOUD_LIB}/{module_name} {CLOUD_WS} {RELATIVE_OUTPUT_PATH} \
     """.replace("  ", ""), echo_cmd=False)
 
@@ -55,7 +58,10 @@ if __name__ == '__main__':
     outs = [f for f in os.listdir(RELATIVE_OUTPUT_PATH) if f not in BL]
     newline = '\n'
     LiveShell(f"""\
+        echo $(date) "gathering results"
         cd {RELATIVE_OUTPUT_PATH}
+        ls -lh
         {newline.join(f"tar -cf - {f} | pigz -5 -p {CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/{f}.tgz" for f in outs)}
         cp result.json {Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/ \
+        echo $(date) "done"
     """.replace("  ", ""), echo_cmd=False)
