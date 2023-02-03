@@ -146,7 +146,7 @@ class ModuleExistsError(FileExistsError):
 
 class ComputeModule(PrivateInit):
     DEFINITION_FILE_NAME = 'definition.py'
-    _group_by: dict[Item, Item]
+    _group_by: dict[Item, Item] # key grouped by val
     def __init__(self,
         procedure: Callable[[JobContext], JobResult],
         inputs: set[Item],
@@ -221,7 +221,7 @@ class ComputeModule(PrivateInit):
         if item in self.outputs: self.output_mask.add(item)
 
     def GetUnmaskedOutputs(self):
-        return self.outputs - self.output_mask
+        return self.outputs.difference(self.output_mask)
 
     # this is getting outdated
     def GetTransform(self):

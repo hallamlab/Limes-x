@@ -44,13 +44,17 @@ if __name__ == '__main__':
     os.chdir(WORKSPACE)
     # monitor = ResourceMonitor(relative_output_path)
     result = None
+    err = ""
     try:
         result = THIS_MODULE._procedure(CONTEXT)
+    except Exception as e:
+        err = str(e)
     finally:
         # res_log = monitor.Stop()
         if result is None:
             result = JobResult()
-            result.error_message = f"procedure failed"
+            result.manifest = {}
+            result.error_message = err
     # result.resource_log = res_log
     result.resource_log = []
     result.cmds = cmd_history

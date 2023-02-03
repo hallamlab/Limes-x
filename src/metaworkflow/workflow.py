@@ -123,6 +123,7 @@ class WorkflowState(PrivateInit):
                     if ji is None: break
                     found = True
                     todo_jobs.pop(0)
+                    ji.complete = True
                     job_instances[id] = ji
 
                     outs = obj.get("outputs")
@@ -196,12 +197,32 @@ class WorkflowState(PrivateInit):
     def _satisfies(self, module: ComputeModule):
         for i in module.inputs:
             if i.key not in self._item_lookup: return False
+            haves = self._item_lookup[i.key]
+            reserved = 0
+            for ii in haves:
+                if ii in self._item_instance_reservations: reserved += 1
+            if reserved >= len(haves): return False
         return True
 
     def GetPendingJobs(self):
         return list(self._pending_jobs.values())        
 
     def _group_by(self, item_name: str, by_name: str):
+        def _next_steps(step: ComputeModule):
+            outs = step.GetUnmaskedOutputs()
+            for cm in self._steps:
+                if any((i in outs) for i in cm.inputs):
+                    yield cm
+
+        for ji in self._pending_jobs.values():
+            step = ji.step
+            steps_to_check = [step]
+            while len(steps_to_check) > 0:
+                curr = steps_to_check.pop()
+                if any(i.key==item_name for i in curr.GetUnmaskedOutputs()):
+                    return {} # still pending
+                steps_to_check += _next_steps(curr)
+        
         _parent_cache = {}
         groups: dict[ItemInstance, set[ItemInstance]] = {}
         if item_name == by_name: return dict((i, {i}) for i in self._item_lookup[item_name])
@@ -236,34 +257,6 @@ class WorkflowState(PrivateInit):
             consumed = ji.ListInputInstances()
             todo += [(original, in_i, path+[ji, in_i]) for in_i in consumed]
 
-        ## filter out incomplete groups ##
-
-        # this should never fail since 
-        # a path must have been traversed to find the parnet
-        assert len(one_path)>0
-        one_path_items = {ii.item_name for ii in one_path if isinstance(ii, ItemInstance)}
-
-        def _group_complete(grouped_by: ItemInstance, group: set[ItemInstance]):
-            while True:
-                # have = tocheck
-                jis = {ii.made_by for ii in group if ii.made_by is not None}
-                if len(jis) == 0: continue # all original input
-                produced = {ii for g in [ji.ListOutputInstances() for ji in jis] if g is not None for ii in g}
-
-                if produced != group:
-                    # produced more than have -> some not consumed
-                    # this max size group is incomplete -> no groups were complete
-                    return False
-
-                consumed = {ii for g in [ji.ListInputInstances() for ji in jis] if g[0].item_name in one_path_items for ii in g}
-                consumed_item = {ii.item_name for ii in consumed}
-
-                if grouped_by.item_name in consumed_item: return True # reached parent, everything checks out
-                group = consumed
-
-        for k in list(groups):
-            if not _group_complete(k, groups[k]):
-                del groups[k]
         return groups
 
     def Update(self):
@@ -306,9 +299,9 @@ class WorkflowState(PrivateInit):
                     if any(ji.step == module for ji in jis): continue
                     instances.append(inst)
 
-                if len(instances) == 0:
-                    outer_continue = True
-                    break
+                if len(instances) == 0: # outer break!
+                    outer_continue=True; break
+
                 have_array = len(instances)>1
                 item_grouped_by = module.Grouped(item)
                 want_array = item_grouped_by is not None
@@ -316,9 +309,11 @@ class WorkflowState(PrivateInit):
                 ## join & group by ##
                 if want_array:
                     groups = self._group_by(item_name, item_grouped_by.key)
+                    if len(groups) == 0:
+                        outer_continue=True; break
+
                     for k in list(groups):
                         grp = groups[k]
-                        rep = next(iter(grp))
                         if any(module in [ji.step for ji in self._item_instance_reservations.get(ii, set())] for ii in grp):
                             del groups[k]
 
@@ -346,6 +341,7 @@ class WorkflowState(PrivateInit):
     def RegisterJobComplete(self, job_id: str, created: dict[Item, Path|list[Path]]):
         del self._pending_jobs[job_id]
         job_inst = self._job_instances[job_id]
+        job_inst.complete = True
 
         expected_outputs = job_inst.step.GetUnmaskedOutputs()
         outs: dict[str, ItemInstance|list[ItemInstance]] = {}
@@ -406,6 +402,19 @@ class Workflow:
         steps, dep_map = self._solver.Solve(given_k, targets_k)
         return steps, dep_map
 
+    def _check_feasible(self, steps: list[ComputeModule], targets: Iterable[Item], dep_map: dict[str, list[ComputeModule]]):
+        targets = set(targets)
+        products = set()
+        for cm in steps:
+            products = products.union(cm.outputs)
+        missing = targets - products
+        assert missing == set(), f"no module produces these items [{', '.join(str(i) for i in missing)}]"
+
+        for cm in steps:
+            deps = dep_map[cm.name]
+            for i, g in cm._group_by.items():
+                assert any(g in pre.inputs for pre in deps), f"invalid grouping: [{g.key}] is not upstream of [{i.key}] for module [{cm.name}]"
+
     # this just does setup, _run actually executes the compute modules
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: dict[Item, str]|dict[Item, Path]|dict[Item, list[str]]|dict[Item, list[Path]],
@@ -453,11 +462,13 @@ class Workflow:
                     os.symlink(p, linked)
                     links.append(linked)
                 inputs[item] = links
-            steps, _ = self._calculate(inputs, targets)
+            steps, dep_map = self._calculate(inputs, targets)
             if steps is False:
                 print(f'no solution exists')
                 return
-            state = WorkflowState.ResumeIfPossible('./', [s.reference for s in steps], inputs)
+            steps = [s.reference for s in steps]
+            self._check_feasible(steps, targets, dep_map)
+            state = WorkflowState.ResumeIfPossible('./', steps, inputs)
             state.Save()
 
             if len(state.GetPendingJobs()) == 0:
@@ -478,7 +489,7 @@ class Workflow:
                     jid = job.GetID()
                     if jid in jobs_ran: continue
                     header = f"{_timestamp()} {job.step.name}:{jid}"
-                    print(f"{header} started {'>'*(50-len(header))}")
+                    print(f"{header} started")
                     _run_job_async(job, lambda: executor.Run(job, workspace, params))
                     jobs_ran[jid] = job
 
@@ -489,11 +500,10 @@ class Workflow:
                         job_instance = jobs_ran[result.made_by]
                         header = f"{_timestamp()} {job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
-                            print(f"{header} failed with msg: [{result.error_message}]")
-                            return
+                            print(f"{header} failed: [{result.error_message}]")
                         else:
                             print(f"{header} completed")
-                            state.RegisterJobComplete(result.made_by, result.manifest)
+                        state.RegisterJobComplete(result.made_by, result.manifest)
                 except KeyboardInterrupt:
                     print("force stopped")
                     return
@@ -501,13 +511,16 @@ class Workflow:
                 state.Save()
 
         original_dir = os.getcwd()
+        # os.makedirs(workspace, exist_ok=True)
+        # os.chdir(workspace)
+        # _run_in_workspace()
         try:
             os.makedirs(workspace, exist_ok=True)
             os.chdir(workspace)
             _run_in_workspace()
             print("done")
         except Exception as e:
-            print(e)
+            print(f"ERROR: {e}")
         finally:
             os.chdir(original_dir)
             return not watcher.kill_now

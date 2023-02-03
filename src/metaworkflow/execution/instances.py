@@ -29,9 +29,10 @@ class JobInstance(_with_hashable_id):
 
         self.outputs: dict[str, ItemInstance|list[ItemInstance]]|None = None
         self._output_instances: list[ItemInstance]|None = None
+        self.complete = False
 
     def __repr__(self) -> str:
-        return f"<ri: {self.step.name}>"
+        return f"<ji: {self.step.name}>"
 
     def _flatten_values(self, data: dict[Any, ItemInstance|list[ItemInstance]]):
         insts: list[ItemInstance] = []
@@ -57,6 +58,7 @@ class JobInstance(_with_hashable_id):
             return dict((k, v.GetID() if isinstance(v, ItemInstance) else [ii.GetID() for ii in v]) for k, v in data.items())
 
         self_dict = {
+            "complete": self.complete,
             "inputs": _dictify(self.inputs),
         }
         if self.outputs is not None:
@@ -83,8 +85,10 @@ class JobInstance(_with_hashable_id):
                 
         inputs = _load(data["inputs"])
         if inputs is None: return None
-
         inst = JobInstance(get_id, step, inputs)
+        outputs = _load(data["outputs"])
+        if outputs is not None: inst.outputs = outputs
+        inst.complete = data["complete"]
         return inst
 
 class ItemInstance(_with_hashable_id):
