@@ -33,13 +33,14 @@ class Job:
         return code==0, "".join(err_log)
 
 ExecutionHandler = Callable[[Job], tuple[bool, str]]
+SetupHandler = Callable[[list[ComputeModule], Path, Params], None]
 class Executor:
-    def __init__(self, execute_procedure: ExecutionHandler|None=None, prerun: Callable[[Path, Params], None]|None=None) -> None:
+    def __init__(self, execute_procedure: ExecutionHandler|None=None, prerun: SetupHandler|None=None) -> None:
         self._execute_procedure: ExecutionHandler = execute_procedure if execute_procedure is not None else lambda j: j.Shell(j.run_command)
-        self._prerun = (lambda x, y: None) if prerun is None else prerun
+        self._prerun = (lambda x, y, z: None) if prerun is None else prerun
 
-    def Prerun(self, inputs_folder: Path, params: Params):
-        self._prerun(inputs_folder, params)
+    def Prerun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
+        self._prerun(modules, inputs_folder, params)
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
         job = Job(
@@ -99,8 +100,23 @@ class Executor:
         return r
 
 class CloudExecutor(Executor):
+    _EXT = 'tgz'
     def __init__(self, zipped_inputs: Path|None=None, execute_procedure: ExecutionHandler | None = None, prerun: Callable[[Path], None] | None = None) -> None:
-        def _prerun(inputs_dir: Path, params: Params):
+        def _prerun(modules: list[ComputeModule], inputs_dir: Path, params: Params):
+            _shell = lambda cmd: LiveShell(cmd=cmd.replace('  ', ''), echo_cmd=False)
+            HERE = os.getcwd()
+            NEWL = '\n'
+            EXT = self._EXT
+
+            ## modules ##
+            for m in modules:
+                if os.path.exists(m.location.joinpath(f'ref.{EXT}')): continue
+                _shell(f"""\
+                    cd {m.location}
+                    tar -hcf - ref | pigz -5 -p {params.threads} >ref.{EXT}
+                """)
+
+            ## inputs ##
             def _remove_tar_ext(f: str):
                 exts = '.tgz .tar.gz'.split(' ')
                 for ext in exts:
@@ -115,16 +131,18 @@ class CloudExecutor(Executor):
                 for f in to_link:
                     os.symlink(zipped_inputs.joinpath(f), f'inputs/{f}')
 
+            _shell(f"""\
+                cd inputs
+                {NEWL.join(f"tar -hcf - {f} | pigz -5 -p {params.threads} >{f}.{EXT}" for f in to_zip)}
+            """)
+
+            ## metaworkflow env ##
             import metaworkflow
             src = os.path.abspath(Path(os.path.dirname(inspect.getfile(metaworkflow))).joinpath('..'))
-            here = os.getcwd()
-            newl = '\n'
-            LiveShell(f"""\
-                cd inputs
-                {newl.join(f"tar -hcf - {f} | pigz -5 -p {params.threads} >{f}.tgz" for f in to_zip)}
+            _shell(f"""\
                 cd {src}
-                tar --exclude=__pycache__ -hcf - {metaworkflow.__name__} | pigz -5 -p {params.threads} >{here}/lib.tgz
-            """, echo_cmd=False)
+                tar --exclude=__pycache__ -hcf - {metaworkflow.__name__} | pigz -5 -p {params.threads} >{HERE}/metaworkflow_src.{EXT}
+            """)
             if prerun is not None: prerun(inputs_dir)
         super().__init__(execute_procedure, _prerun)
 
@@ -138,7 +156,7 @@ class CloudExecutor(Executor):
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
         job.run_command  = f"""\
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {workspace.joinpath('lib.tgz')} SLURM_TMPDIR \
+            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {workspace.joinpath(f'metaworkflow_src.{self._EXT}')} SLURM_TMPDIR \
         """.replace("  ", "")
         success, msg = self._execute_procedure(job)
         return self._compile_result(job, success, msg)

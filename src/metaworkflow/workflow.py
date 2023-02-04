@@ -477,7 +477,7 @@ class Workflow:
 
             print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
 
-            executor.Prerun(self.INPUT_DIR, params)
+            executor.Prerun(steps, self.INPUT_DIR, params)
 
             jobs_ran: dict[str, JobInstance] = {}
             while not watcher.kill_now:

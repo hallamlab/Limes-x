@@ -60,14 +60,15 @@ class Params:
 
 class JobContext(AutoPopulate):
     __FILE_NAME = 'context.json'
+    __BL = {'shell', 'output_folder', 'lib', 'ref'}
     shell_prefix: str
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
     manifest: dict[Item, Path|list[Path]]
     job_id: str
-    run_before: str
-    run_after: str
+    lib: Path
+    ref: Path
 
     def Save(self, workspace: Path):
         folder = workspace.joinpath(self.output_folder)
@@ -76,7 +77,7 @@ class JobContext(AutoPopulate):
             d = {}
             for k, v in self.__dict__.items():
                 if k.startswith('_'): continue
-                if k in ['shell', 'output_folder']: continue
+                if k in self.__BL: continue
                 v: Any = v
                 if v is None: continue
                 v = { # switch
@@ -94,6 +95,7 @@ class JobContext(AutoPopulate):
             d = json.load(j)
             kwargs = {}
             for k in d:
+                if k in cls.__BL: continue
                 v: Any = d[k]
                 v = { # switch
                     'shell': lambda: None,
@@ -189,15 +191,15 @@ class ComputeModule(PrivateInit):
     @classmethod
     def _load(cls, folder_path: str|Path):
         folder_path = Path(os.path.abspath(folder_path))
-        name = str(folder_path).split('/')[-1] # the folder name
+        name = str(folder_path).split('/')[-2] # the folder name
 
         err_msg = f"module [{name}] at [{folder_path}] appears to be corrupted"
         assert os.path.exists(folder_path), err_msg
-        assert os.path.isfile(folder_path.joinpath(cls.DEFINITION_FILE_NAME)), err_msg
+        assert os.path.isfile(folder_path.joinpath(f'lib/{cls.DEFINITION_FILE_NAME}')), err_msg
         # assert os.path.isfile(folder_path.joinpath("__main__.py")), err_msg
         original_path = sys.path
         # os.chdir(folder_path.joinpath('..'))
-        sys.path = [str(folder_path)]+sys.path
+        sys.path = [str(folder_path.joinpath('lib'))]+sys.path
         try:
             import definition as mo # type: ignore
             importlib.reload(mo)
@@ -269,10 +271,10 @@ class ModuleBuilder:
         toks = definition_file.split('/')
         assert toks[-1] == ComputeModule.DEFINITION_FILE_NAME, f"the module's definition file must be named {ComputeModule.DEFINITION_FILE_NAME}"
         if name is None:
-            assert len(toks)>=2 and toks[-2] != "", f"can't infer name from {def_path}"
-            name = toks[-2]
+            assert len(toks)>=3 and toks[-3] != "", f"can't infer name from {def_path}"
+            name = toks[-3]
         self._name = name
-        self._location = Path(os.path.abspath(def_path.joinpath('..')))
+        self._location = Path(os.path.abspath(def_path.joinpath('../..')))
         return self
 
     def Build(self):
@@ -298,17 +300,21 @@ class ModuleBuilder:
         name = name.replace('/', '_').replace(' ', '-')
         module_root = Path.joinpath(modules_folder, name)
 
+        def _make_folders():
+            os.makedirs(module_root.joinpath('lib'))
+            os.makedirs(module_root.joinpath('ref'))
+
         if os.path.exists(module_root):
             if on_exist=='overwrite':
                 shutil.rmtree(module_root, ignore_errors=True)
-                os.makedirs(module_root)
+                _make_folders()
             elif on_exist=='error':
                 raise ModuleExistsError(f"module [{name}] already exists at [{modules_folder}]")
             elif on_exist=='skip':
                 print(f'module [{name}] already exits! skipping...')
                 return ComputeModule._load(module_root)
         else:
-            os.makedirs(module_root)
+            _make_folders()
 
         try:
             HERE = Path('/'.join(os.path.realpath(__file__).split('/')[:-1]))
@@ -316,7 +322,7 @@ class ModuleBuilder:
             HERE = Path(os.getcwd())
         
         template_file_name = 'template_module_definition.py'
-        shutil.copy(HERE.joinpath(template_file_name), module_root.joinpath(ComputeModule.DEFINITION_FILE_NAME))
+        shutil.copy(HERE.joinpath(template_file_name), module_root.joinpath('lib').joinpath(ComputeModule.DEFINITION_FILE_NAME))
         for path, dirs, files in os.walk(module_root):
             for f in files:
                 os.chmod(os.path.join(path, f), 0o775)

@@ -62,7 +62,9 @@ if __name__ == '__main__':
     module_name = str(MODULE_PATH).split('/')[-1]
     _shell(f"""\
         echo $(date) "setting up env"
-        cp -r {MODULE_PATH} {CLOUD_LIB}/
+        mkdir -p {CLOUD_LIB}/{module_name}
+        cp -r {MODULE_PATH}/lib {CLOUD_LIB}/{module_name}
+        tar -hxf {MODULE_PATH}/ref.tgz -C {CLOUD_LIB}/{module_name}
         cd {CLOUD_WS}
         cp {WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH)}/*.json {RELATIVE_OUTPUT_PATH}/
         ls -lh

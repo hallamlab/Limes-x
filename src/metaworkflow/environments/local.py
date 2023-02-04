@@ -40,12 +40,15 @@ if __name__ == '__main__':
 
     CONTEXT.shell = _shell
     CONTEXT.output_folder = RELATIVE_OUTPUT_PATH
+    CONTEXT.lib = MODULE_PATH.joinpath('lib')
+    CONTEXT.ref = MODULE_PATH.joinpath('ref')
 
     os.chdir(WORKSPACE)
     # monitor = ResourceMonitor(relative_output_path)
     result = None
     err = ""
     try:
+        sys.path = list(set([str(CONTEXT.lib)] + sys.path))
         result = THIS_MODULE._procedure(CONTEXT)
     except Exception as e:
         err = str(e)
