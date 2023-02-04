@@ -156,6 +156,8 @@ class ComputeModule(PrivateInit):
         outputs: set[Item],
         location: str|Path,
         name: str|None = None,
+        threads: int|None = None,
+        memory_gb: int|None = None,
         **kwargs
     ) -> None:
 
@@ -169,6 +171,8 @@ class ComputeModule(PrivateInit):
         self._procedure = procedure
         self.location = Path(location).absolute()
         self.output_mask: set[Item] = set()
+        self.threads = threads
+        self.memory_gb = memory_gb
 
     def Grouped(self, item: Item):
         return self._group_by.get(item)
@@ -243,6 +247,8 @@ class ModuleBuilder:
     _outputs: set[Item]
     _location: Path
     _name: str
+    _threads: int
+    _memory_gb: int
 
     def __init__(self) -> None:
         self._groupings = {}
@@ -275,6 +281,13 @@ class ModuleBuilder:
             name = toks[-3]
         self._name = name
         self._location = Path(os.path.abspath(def_path.joinpath('../..')))
+        return self
+
+    def SuggestedResources(self, threads: int, memory_gb: int):
+        assert threads>0
+        assert memory_gb>0
+        self._threads = threads
+        self._memory_gb = memory_gb
         return self
 
     def Build(self):

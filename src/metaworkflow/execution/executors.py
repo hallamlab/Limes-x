@@ -35,19 +35,26 @@ class Job:
 ExecutionHandler = Callable[[Job], tuple[bool, str]]
 SetupHandler = Callable[[list[ComputeModule], Path, Params], None]
 class Executor:
-    def __init__(self, execute_procedure: ExecutionHandler|None=None, prerun: SetupHandler|None=None) -> None:
+    def __init__(self, execute_procedure: ExecutionHandler|None=None, prepare_run: SetupHandler|None=None) -> None:
         self._execute_procedure: ExecutionHandler = execute_procedure if execute_procedure is not None else lambda j: j.Shell(j.run_command)
-        self._prerun = (lambda x, y, z: None) if prerun is None else prerun
+        self._prepare_run = (lambda x, y, z: None) if prepare_run is None else prepare_run
 
-    def Prerun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
-        self._prerun(modules, inputs_folder, params)
+    def PrepareRun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
+        self._prepare_run(modules, inputs_folder, params)
+
+    def _overload_params(self, job: Job):
+        step = job.instance.step
+        params = job.context.params
+        if step.threads is not None: params.threads = step.threads
+        if step.memory_gb is not None: params.mem_gb = step.memory_gb
+        return job
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
-        job = Job(
+        job = self._overload_params(Job(
             instance = instance,
             workspace = workspace,
             params = params,
-        )
+        ))
 
         from ..environments import local
         entry_point = Path(os.path.abspath(inspect.getfile(local)))
@@ -102,7 +109,7 @@ class Executor:
 class CloudExecutor(Executor):
     _EXT = 'tgz'
     def __init__(self, zipped_inputs: Path|None=None, execute_procedure: ExecutionHandler | None = None, prerun: Callable[[Path], None] | None = None) -> None:
-        def _prerun(modules: list[ComputeModule], inputs_dir: Path, params: Params):
+        def _prepare_run(modules: list[ComputeModule], inputs_dir: Path, params: Params):
             _shell = lambda cmd: LiveShell(cmd=cmd.replace('  ', ''), echo_cmd=False)
             HERE = os.getcwd()
             NEWL = '\n'
@@ -144,14 +151,14 @@ class CloudExecutor(Executor):
                 tar --exclude=__pycache__ -hcf - {metaworkflow.__name__} | pigz -5 -p {params.threads} >{HERE}/metaworkflow_src.{EXT}
             """)
             if prerun is not None: prerun(inputs_dir)
-        super().__init__(execute_procedure, _prerun)
+        super().__init__(execute_procedure, _prepare_run)
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
-        job = Job(
+        job = self._overload_params(Job(
             instance = instance,
             workspace = workspace,
             params = params,
-        )
+        ))
 
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
