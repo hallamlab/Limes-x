@@ -425,7 +425,7 @@ class Workflow:
                 assert any(g in pre.inputs for pre in deps), f"invalid grouping: [{g.key}] is not upstream of [{i.key}] for module [{cm.name}]"
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
-        given: dict[Item, str]|dict[Item, Path]|dict[Item, list[str]]|dict[Item, list[Path]],
+        given: dict[Item, str|Path|list[str|Path]],
         executor: Executor, params: Params=Params()):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
@@ -434,8 +434,8 @@ class Workflow:
 
         # abs. path before change to working dir
         sys.path = [os.path.abspath(p) for p in sys.path]
-        abs_path = lambda p: Path(os.path.abspath(p))
-        abs_given = dict((k, [abs_path(p) for p in v] if isinstance(v, list) else [abs_path(v)]) for k, v in given.items())
+        abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
+        abs_given = dict((k, [abs_path_if_path(p) for p in v] if isinstance(v, list) else [abs_path_if_path(v)]) for k, v in given.items())
 
         def _timestamp():
             return f"{dt.now().strftime('%H:%M:%S')}>"
@@ -462,15 +462,18 @@ class Workflow:
             input_dir = self.INPUT_DIR
             os.makedirs(input_dir, exist_ok=True)
             inputs: dict[Item, list[Path]] = {}
-            for item, paths in abs_given.items():
-                links = []
-                for p in paths:
+            for item, values in abs_given.items():
+                parsed = []
+                for p in values:
+                    if isinstance(p, str):
+                        parsed.append(p)
+                        continue
                     assert os.path.exists(p), f"given [{p}] doesn't exist"
                     linked = input_dir.joinpath(p.name)
                     if linked.exists(): os.remove(linked)
                     os.symlink(p, linked)
-                    links.append(linked)
-                inputs[item] = links
+                    parsed.append(linked)
+                inputs[item] = parsed
             _steps, dep_map = self._calculate(inputs, targets)
             if _steps is False:
                 print(f'no solution exists')
@@ -521,6 +524,11 @@ class Workflow:
                 state.Save()
 
         original_dir = os.getcwd()
+        # os.makedirs(workspace, exist_ok=True)
+        # os.chdir(workspace)
+        # _run_in_workspace()
+        # print("done")
+        # os.chdir(original_dir)
         try:
             os.makedirs(workspace, exist_ok=True)
             os.chdir(workspace)

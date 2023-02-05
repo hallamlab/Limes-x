@@ -93,10 +93,11 @@ class JobInstance(_with_hashable_id):
         return inst
 
 class ItemInstance(_with_hashable_id):
-    def __init__(self, id_gen: Callable[[int], str], item:Item, obj: dict, made_by: JobInstance|None=None) -> None:
+    def __init__(self, id_gen: Callable[[int], str], item:Item, value: str|Path, made_by: JobInstance|None=None) -> None:
         super().__init__(id_gen(12))
         self.item_name = item.key
-        self.obj = obj
+        self.value = value
+        self.type = type(value)
         self.made_by = made_by
     
     def __repr__(self) -> str:
@@ -104,21 +105,27 @@ class ItemInstance(_with_hashable_id):
 
     def ToDict(self):
         self_dict: dict[str, Any] = {
-            "obj": self.obj,
+            "value": str(self.value),
+            "type": str(self.type)
         }
         if self.made_by is not None:
             self_dict["made_by"] = self.made_by.GetID()
         return self_dict
     
     @classmethod
-    def FromDict(cls, item: Item, id: str, data: dict, job_instance_ref: dict[str, JobInstance], given: set[str]):
+    def FromDict(cls, item_key: str, id: str, data: dict, job_instance_ref: dict[str, JobInstance], given: set[str]):
         get_id = lambda _: id
-        obj = data["obj"]
+        type_str = data["type"]
+        path_type_str = str(type(Path('')))
+        value = data["value"]
+        if type_str == path_type_str: value = Path(value)
         made_by_id = data.get("made_by")
+
+
 
         if id not in given:
             if made_by_id not in job_instance_ref: return None
             made_by = job_instance_ref[made_by_id] if made_by_id is not None else None
         else:
             made_by = None # was given
-        return ItemInstance(get_id, item, obj, made_by=made_by)
+        return ItemInstance(get_id, Item(item_key), value, made_by=made_by)

@@ -61,11 +61,17 @@ if __name__ == '__main__':
     result.out_log = out_log
     result.err_log = err_log
 
-    for k, paths in list(result.manifest.items()):
-        if isinstance(paths, list):
-            relative = [Path(os.path.abspath(p)).relative_to(WORKSPACE) for p in paths]
+    def _rectify_if_path(v):
+        if isinstance(v, Path):
+            return Path(os.path.abspath(v)).relative_to(WORKSPACE)
         else:
-            relative = Path(os.path.abspath(paths)).relative_to(WORKSPACE)
+            return v
+
+    for k, val in list(result.manifest.items()):
+        if isinstance(val, list):
+            relative = [_rectify_if_path(p) for p in val]
+        else:
+            relative = _rectify_if_path(val)
         result.manifest[k] = relative
 
     err_msg = None
@@ -73,6 +79,7 @@ if __name__ == '__main__':
         for ps in result.manifest.values():
             _break = False
             for p in ps if isinstance(ps, list) else [ps]:
+                if isinstance(p, str): continue
                 if os.path.exists(p): continue
                 result.error_message = f'promised output at [{p}] missing'
                 _break = True

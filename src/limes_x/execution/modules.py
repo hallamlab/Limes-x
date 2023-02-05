@@ -35,7 +35,6 @@ class Item:
         return self._hash
 
 ManifestDict = dict[Item, Path]
-
 class Params:
     def __init__(self,
         file_system_wait_sec: int=5,
@@ -67,6 +66,27 @@ class Params:
             setattr(p, k, val)
         return p
 
+ManifestItem = str|Path|list[str|Path]
+def _manifest2dict(d: dict[Item, ManifestItem]):
+    paths, strings = {}, {}
+    for item, v in d.items():
+        k = item.key
+        if isinstance(v, Path):
+            paths[k] = str(v)
+        else:
+            strings[k] = str(v)
+    save = {}
+    if len(paths)>0: save['paths'] = paths
+    if len(strings)>0: save['strings'] = strings
+    return save if len(save)>0 else None
+
+def _dict2manifest(d: dict[str, dict]):
+    paths, strings = d.get('paths'), d.get('strings')
+    man = {}
+    if paths is not None: man.update((Item(k), Path(p)) for k, p in paths.items())
+    if strings is not None: man.update((Item(k), s) for k, s in strings.items())
+    return man
+
 class JobContext(AutoPopulate):
     __FILE_NAME = 'context.json'
     __BL = {'shell', 'output_folder', 'lib'}
@@ -74,9 +94,13 @@ class JobContext(AutoPopulate):
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
-    manifest: dict[Item, dict|list[dict]]
+    manifest: dict[Item, ManifestItem]
     job_id: str
     lib: Path
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if self.shell_prefix is None: self.shell_prefix = ""
 
     def Save(self, workspace: Path):
         folder = workspace.joinpath(self.output_folder)
@@ -87,12 +111,13 @@ class JobContext(AutoPopulate):
                 if k.startswith('_'): continue
                 if k in self.__BL: continue
                 v: Any = v
-                if v is None: continue
                 v = { # switch
                     'shell': lambda: None,
+                    'shell_prefix': lambda: None if v == "" else v,
                     'params': lambda: v.ToDict(),
-                    'manifest': lambda: v,
-                }.get(k, lambda: str(v))()
+                    'manifest': lambda: _manifest2dict(v),
+                }.get(k, lambda: str(v) if isinstance(v, Path) else v)()
+                if v is None: continue
                 d[k] = v
             json.dump(d, j, indent=4)
             return d
@@ -108,12 +133,11 @@ class JobContext(AutoPopulate):
                 v = { # switch
                     'shell': lambda: None,
                     'params': lambda: Params.FromDict(v),
+                    'manifest': lambda: _dict2manifest(v),
                     'output_folder': lambda: Path(v),
-                    'manifest': lambda: v,
+                    'lib': lambda: Path(v),
                 }.get(k, lambda: str(v))()
                 kwargs[k] = v
-            if 'shell_prefix' not in d:
-                kwargs['shell_prefix'] = ''
             if 'output_folder' not in d:
                 kwargs['output_folder'] = output_folder
             return JobContext(**kwargs)
@@ -131,22 +155,21 @@ class JobResult(AutoPopulate):
         d = {}
         for k, v in self.__dict__.items():
             v: Any = v
-            if v is None: continue
             v = { # switch
-                "manifest": lambda: dict((mk.key, [str(p) for p in mv] if isinstance(mv, list) else str(mv)) for mk, mv in v.items()),
+                "manifest": lambda: _manifest2dict(v),
             }.get(k, lambda: v)()
+            if v is None: continue
             d[k] = v
         return d
 
     @classmethod
     def FromDict(cls, d: dict):
-        man_dict = lambda v: dict((Item(mk), [Path(p) for p in mv] if isinstance(mv, list) else Path(mv)) for mk, mv in v.items())
         kwargs = {}
         for k in d:
             v: Any = d[k]
             v = { # switch
                 "exit_code": lambda: int(v),
-                "manifest": lambda: man_dict(v) if isinstance(v, dict) else [man_dict(x) for x in v],
+                "manifest": lambda: _dict2manifest(v),
             }.get(k, lambda: v)()
             kwargs[k] = v
         return JobResult(**kwargs)
