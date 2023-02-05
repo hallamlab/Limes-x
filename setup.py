@@ -4,16 +4,16 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="metaworkflow",
+    name="limes_x",
     version="0.1.0",
     author="Tony Liu",
     author_email="contacttonyliu@gmail.com",
     description="declarative workflow automation",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/Tony-xy-Liu/metaworkflow",
+    url="https://github.com/Tony-xy-Liu/limes_x",
     project_urls={
-        "Bug Tracker": "https://github.com/Tony-xy-Liu/metaworkflow/issues",
+        "Bug Tracker": "https://github.com/Tony-xy-Liu/limes_x/issues",
     },
     classifiers=[
         "Programming Language :: Python :: 3",

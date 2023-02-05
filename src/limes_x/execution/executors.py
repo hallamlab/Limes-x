@@ -108,6 +108,7 @@ class Executor:
 
 class CloudExecutor(Executor):
     _EXT = 'tgz'
+    _SRC_FOLDER_NAME = 'limesx_src'
     def __init__(self, zipped_inputs: Path|None=None, execute_procedure: ExecutionHandler | None = None, prerun: Callable[[Path], None] | None = None) -> None:
         def _prepare_run(modules: list[ComputeModule], inputs_dir: Path, params: Params):
             _shell = lambda cmd: LiveShell(cmd=cmd.replace('  ', ''), echo_cmd=False)
@@ -143,12 +144,12 @@ class CloudExecutor(Executor):
                 {NEWL.join(f"tar -hcf - {f} | pigz -5 -p {params.threads} >{f}.{EXT}" for f in to_zip)}
             """)
 
-            ## metaworkflow env ##
-            import metaworkflow
-            src = os.path.abspath(Path(os.path.dirname(inspect.getfile(metaworkflow))).joinpath('..'))
+            ## limes_x env ##
+            import limes_x
+            src = os.path.abspath(Path(os.path.dirname(inspect.getfile(limes_x))).joinpath('..'))
             _shell(f"""\
                 cd {src}
-                tar --exclude=__pycache__ -hcf - {metaworkflow.__name__} | pigz -5 -p {params.threads} >{HERE}/metaworkflow_src.{EXT}
+                tar --exclude=__pycache__ -hcf - {limes_x.__name__} | pigz -5 -p {params.threads} >{HERE}/{self._SRC_FOLDER_NAME}.{EXT}
             """)
             if prerun is not None: prerun(inputs_dir)
         super().__init__(execute_procedure, _prepare_run)
@@ -163,7 +164,7 @@ class CloudExecutor(Executor):
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
         job.run_command  = f"""\
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {workspace.joinpath(f'metaworkflow_src.{self._EXT}')} SLURM_TMPDIR \
+            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} SLURM_TMPDIR \
         """.replace("  ", "")
         success, msg = self._execute_procedure(job)
         return self._compile_result(job, success, msg)

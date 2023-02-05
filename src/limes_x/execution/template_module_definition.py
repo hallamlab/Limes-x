@@ -1,5 +1,5 @@
 from pathlib import Path
-from metaworkflow import ModuleBuilder, Item, JobContext, JobResult
+from limes_x import ModuleBuilder, Item, JobContext, JobResult
 
 A = Item('a')
 B = Item('b')

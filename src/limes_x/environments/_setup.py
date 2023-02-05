@@ -11,8 +11,8 @@ def ParseArgs(python_path: list[str]|None=None):
     # PYTHONPATH = _paths[3]
     # sys.path = list(set(sys.path + PYTHONPATH.split(':')))
 
-    from metaworkflow.execution.modules import ComputeModule, JobContext
-    # from metaworkflow.telemetry import ResourceMonitor
+    from limes_x.execution.modules import ComputeModule, JobContext
+    # from limes_x.telemetry import ResourceMonitor
 
     CONTEXT = JobContext.LoadFromDisk(WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH))
     # MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])

@@ -1,4 +1,4 @@
-# NAME=metaworkflow
+# NAME=limes_x
 # DOCKER_IMAGE=quay.io/txyliu/$NAME
 # echo image: $DOCKER_IMAGE
 # echo ""
@@ -30,7 +30,7 @@ case $1 in
         python -m twine upload --repository $PYPI dist/* -u __token__ -p $TOKEN
     ;;
     --pip-remove|-x)
-        pip uninstall -y metaworkflow
+        pip uninstall -y limes_x
     ;;
     -t)
         echo "hi"

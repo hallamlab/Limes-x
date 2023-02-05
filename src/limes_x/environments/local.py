@@ -9,8 +9,8 @@ if __name__ == '__main__':
     from _setup import ParseArgs
     e = ParseArgs()
     MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module
-    from metaworkflow.common.utils import LiveShell
-    from metaworkflow.execution.modules import JobResult
+    from limes_x.common.utils import LiveShell
+    from limes_x.execution.modules import JobResult
 
     cmd_history = []
     err_log, out_log = [], []

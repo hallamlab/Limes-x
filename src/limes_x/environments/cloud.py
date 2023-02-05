@@ -11,7 +11,7 @@ if __name__ == '__main__':
     
     CLOUD_SPACE: Path|None = None
     while CLOUD_SPACE is None or CLOUD_SPACE.exists():
-        CLOUD_SPACE = TMP.joinpath(f'metaworkflow-{uuid.uuid4().hex}')
+        CLOUD_SPACE = TMP.joinpath(f'limes_x-{uuid.uuid4().hex}')
     CLOUD_WS = CLOUD_SPACE.joinpath('workspace')
     CLOUD_LIB = CLOUD_SPACE.joinpath('lib')
     os.makedirs(CLOUD_WS)
@@ -36,8 +36,8 @@ if __name__ == '__main__':
             os.system(f"cd {folder} && tar -hxf {WORKSPACE.joinpath(f'{output}.tgz')}")
             unzipped.add(output)
 
-    import metaworkflow.environments.local as env
-    from metaworkflow.common.utils import LiveShell
+    import limes_x.environments.local as env
+    from limes_x.common.utils import LiveShell
 
     cmd_history = []
     err_log, out_log = [], []
@@ -57,7 +57,7 @@ if __name__ == '__main__':
             onErr=lambda s: _on_io(s, err_log),
         )
 
-    # print(sys.argv, metaworkflow.__name__)
+    # print(sys.argv, limes_x.__name__)
     lib_name = env.__name__
     module_name = str(MODULE_PATH).split('/')[-1]
     _shell(f"""\

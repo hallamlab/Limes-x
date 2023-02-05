@@ -1,4 +1,4 @@
-from metaworkflow.compute_module import Item, JobContext, JobResult
+from limes_x.compute_module import Item, JobContext, JobResult
 
 A = Item('test_text')
 B = Item('test_echo')
