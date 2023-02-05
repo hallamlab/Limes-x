@@ -6,6 +6,8 @@ import importlib
 from typing import Callable, Iterable, Any, Literal
 import json
 
+from limes_x.common.utils import LiveShell
+
 from .solver import Transform
 from ..common.utils import AutoPopulate, PrivateInit
 
@@ -39,28 +41,35 @@ class Params:
         file_system_wait_sec: int=5,
         threads: int=4,
         mem_gb: int=8,
+        reference_folder: Path=Path(''),
     ) -> None:
         self.file_system_wait_sec = file_system_wait_sec
         self.threads = threads
         self.mem_gb = mem_gb
+        self.reference_folder = reference_folder
 
     def Copy(self):
         cp = Params(**self.__dict__)
         return cp
 
     def ToDict(self):
-        return self.__dict__
+        return dict((k, str(v)) for k, v in self.__dict__.items())
 
     @classmethod
     def FromDict(cls, d: dict):
         p = Params()
-        for k, v in d.items():
-            setattr(p, k, v)
+        for k, val in d.items():
+            val = { # switch
+                'reference_folder': lambda: Path(val),
+                'threads': lambda: int(val),
+                'mem_gb': lambda: int(val), 
+            }.get(k, lambda: val)()
+            setattr(p, k, val)
         return p
 
 class JobContext(AutoPopulate):
     __FILE_NAME = 'context.json'
-    __BL = {'shell', 'output_folder', 'lib', 'ref'}
+    __BL = {'shell', 'output_folder', 'lib'}
     shell_prefix: str
     params: Params
     shell: Callable[[str], int]
@@ -68,7 +77,6 @@ class JobContext(AutoPopulate):
     manifest: dict[Item, Path|list[Path]]
     job_id: str
     lib: Path
-    ref: Path
 
     def Save(self, workspace: Path):
         folder = workspace.joinpath(self.output_folder)
@@ -148,6 +156,8 @@ class ModuleExistsError(FileExistsError):
 
 class ComputeModule(PrivateInit):
     DEFINITION_FILE_NAME = 'definition.py'
+    LIB_FOLDER = 'lib'
+    SETUP_FOLDER = 'setup'
     _group_by: dict[Item, Item] # key grouped by val
     def __init__(self,
         procedure: Callable[[JobContext], JobResult],
@@ -158,6 +168,7 @@ class ComputeModule(PrivateInit):
         name: str|None = None,
         threads: int|None = None,
         memory_gb: int|None = None,
+        requirements: set[str] = set(),
         **kwargs
     ) -> None:
 
@@ -173,6 +184,18 @@ class ComputeModule(PrivateInit):
         self.output_mask: set[Item] = set()
         self.threads = threads
         self.memory_gb = memory_gb
+        self.requirements = requirements
+
+    def Setup(self, reference_folder: Path, install_type: str):
+        snakefile = f"{self.location}/setup/setup.smk"
+        print(f'setup {self.name} {">"*(50-len(self.name))}')
+        if os.path.exists(snakefile):
+            LiveShell(f"""\
+                snakemake --cores 1 --snakefile {snakefile} --directory {reference_folder} {install_type}
+            """.replace('  ', ''), echo_cmd=False)
+        else:
+            print("no setup defined")
+        print()
 
     def Grouped(self, item: Item):
         return self._group_by.get(item)
@@ -199,11 +222,11 @@ class ComputeModule(PrivateInit):
 
         err_msg = f"module [{name}] at [{folder_path}] appears to be corrupted"
         assert os.path.exists(folder_path), err_msg
-        assert os.path.isfile(folder_path.joinpath(f'lib/{cls.DEFINITION_FILE_NAME}')), err_msg
+        assert os.path.isfile(folder_path.joinpath(f'{cls.LIB_FOLDER}/{cls.DEFINITION_FILE_NAME}')), err_msg
         # assert os.path.isfile(folder_path.joinpath("__main__.py")), err_msg
         original_path = sys.path
         # os.chdir(folder_path.joinpath('..'))
-        sys.path = [str(folder_path.joinpath('lib'))]+sys.path
+        sys.path = [str(folder_path.joinpath(cls.LIB_FOLDER))]+sys.path
         try:
             import definition as mo # type: ignore
             importlib.reload(mo)
@@ -241,7 +264,7 @@ class ComputeModule(PrivateInit):
                 reference=self,
             )
 
-class ModuleBuilder:
+class ModuleBuilder(AutoPopulate):
     _groupings: dict[Item, Item]
     _inputs: set[Item]
     _outputs: set[Item]
@@ -249,11 +272,14 @@ class ModuleBuilder:
     _name: str
     _threads: int
     _memory_gb: int
+    _requirements: set[str]
 
-    def __init__(self) -> None:
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._groupings = {}
         self._inputs = set()
         self._outputs = set()
+        self._requirements = set()
 
     def SetProcedure(self, procedure: Callable[[JobContext], JobResult]):
         self._procedure = procedure
@@ -290,6 +316,10 @@ class ModuleBuilder:
         self._memory_gb = memory_gb
         return self
 
+    def Requires(self, requirements: set[str]):
+        self._requirements = requirements
+        return self
+
     def Build(self):
         assert len(self._outputs) > 0, f"module has no outputs and so is not useful"
         cm = ComputeModule(
@@ -300,6 +330,9 @@ class ModuleBuilder:
             outputs=self._outputs,
             location=self._location,
             name=self._name,
+            threads=self._threads,
+            memory_gb=self._memory_gb,
+            requirements=self._requirements
         )
         return cm
 
@@ -314,8 +347,8 @@ class ModuleBuilder:
         module_root = Path.joinpath(modules_folder, name)
 
         def _make_folders():
-            os.makedirs(module_root.joinpath('lib'))
-            os.makedirs(module_root.joinpath('ref'))
+            os.makedirs(module_root.joinpath(ComputeModule.LIB_FOLDER))
+            os.makedirs(module_root.joinpath(ComputeModule.SETUP_FOLDER))
 
         if os.path.exists(module_root):
             if on_exist=='overwrite':
@@ -335,7 +368,9 @@ class ModuleBuilder:
             HERE = Path(os.getcwd())
         
         template_file_name = 'template_module_definition.py'
-        shutil.copy(HERE.joinpath(template_file_name), module_root.joinpath('lib').joinpath(ComputeModule.DEFINITION_FILE_NAME))
+        shutil.copy(HERE.joinpath(template_file_name), module_root.joinpath(ComputeModule.LIB_FOLDER).joinpath(ComputeModule.DEFINITION_FILE_NAME))
+        with open(module_root.joinpath('setup/setup.smk'), 'w') as f:
+            f.write('rule singularity:\n')
         for path, dirs, files in os.walk(module_root):
             for f in files:
                 os.chmod(os.path.join(path, f), 0o775)

@@ -23,6 +23,7 @@ class Job:
         c.job_id = self.instance.GetID()
         c.output_folder = Path(f"{self.instance.step.name}--{self.instance.GetID()}")
         c.params = params.Copy()
+        c.lib = instance.step.location.joinpath(ComputeModule.LIB_FOLDER)
         c.manifest = dict((Item(k), [ii.path for ii in v] if isinstance(v, list) else v.path) for k, v in self.instance.inputs.items())
         c.Save(workspace)
         self.context = c
@@ -109,6 +110,7 @@ class Executor:
 class CloudExecutor(Executor):
     _EXT = 'tgz'
     _SRC_FOLDER_NAME = 'limesx_src'
+    _NO_ZIP = ['tgz', 'tar.gz', 'sif']
     def __init__(self, zipped_inputs: Path|None=None, execute_procedure: ExecutionHandler | None = None, prerun: Callable[[Path], None] | None = None) -> None:
         def _prepare_run(modules: list[ComputeModule], inputs_dir: Path, params: Params):
             _shell = lambda cmd: LiveShell(cmd=cmd.replace('  ', ''), echo_cmd=False)
@@ -116,13 +118,19 @@ class CloudExecutor(Executor):
             NEWL = '\n'
             EXT = self._EXT
 
-            ## modules ##
-            for m in modules:
-                if os.path.exists(m.location.joinpath(f'ref.{EXT}')): continue
+            ## requirements ##
+            if os.path.exists(params.reference_folder):
+                requirements = {req for g in [m.requirements for m in modules] for req in g if not any(req.endswith(e) for e in self._NO_ZIP)}
+                for req in list(requirements):
+                    if os.path.exists(f'{params.reference_folder}/{req}.{EXT}'):
+                        print(f'using cached {req}.{EXT}')
+                        requirements.remove(req)
                 _shell(f"""\
-                    cd {m.location}
-                    tar -hcf - ref | pigz -5 -p {params.threads} >ref.{EXT}
+                    cd {params.reference_folder}
+                    {NEWL.join(f"tar -hcf - {req} | pigz -5 -p {params.threads} >{req}.{EXT}" for req in requirements)}
                 """)
+            else:
+                print('no references given')
 
             ## inputs ##
             def _remove_tar_ext(f: str):
@@ -164,7 +172,8 @@ class CloudExecutor(Executor):
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
         job.run_command  = f"""\
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} SLURM_TMPDIR \
+            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} \
+                {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} SLURM_TMPDIR {":".join(self._NO_ZIP)} \
         """.replace("  ", "")
         success, msg = self._execute_procedure(job)
         return self._compile_result(job, success, msg)

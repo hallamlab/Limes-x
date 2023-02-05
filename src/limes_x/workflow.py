@@ -389,12 +389,21 @@ class TerminationWatcher:
 
 class Workflow:
     INPUT_DIR = Path("inputs")
-    def __init__(self, compute_modules: list[ComputeModule]|Path|str) -> None:
+    def __init__(self, compute_modules: list[ComputeModule]|Path|str, reference_folder: Path|str) -> None:
         if isinstance(compute_modules, Path) or isinstance(compute_modules, str):
             compute_modules = ComputeModule.LoadSet(compute_modules)
 
         self._compute_modules = compute_modules
+        self._reference_folder = Path(os.path.abspath(reference_folder))
+        if not self._reference_folder.exists():
+            os.makedirs(self._reference_folder)
+        else:
+            assert os.path.isdir(self._reference_folder), f"reference folder path exists, but is not a folder: {self._reference_folder}"
         self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
+
+    def Setup(self, install_type: str):
+        for step in self._compute_modules:
+            step.Setup(self._reference_folder, install_type)
 
     def _calculate(self, given: Iterable[Item], targets: Iterable[Item]):
         given_k = {x.key for x in given}
@@ -415,13 +424,13 @@ class Workflow:
             for i, g in cm._group_by.items():
                 assert any(g in pre.inputs for pre in deps), f"invalid grouping: [{g.key}] is not upstream of [{i.key}] for module [{cm.name}]"
 
-    # this just does setup, _run actually executes the compute modules
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: dict[Item, str]|dict[Item, Path]|dict[Item, list[str]]|dict[Item, list[Path]],
         executor: Executor, params: Params=Params()):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
+        params.reference_folder = self._reference_folder
 
         # abs. path before change to working dir
         sys.path = [os.path.abspath(p) for p in sys.path]
@@ -447,7 +456,6 @@ class Workflow:
         
             th = Thread(target=_job)
             th.start()
-            return th
 
         def _run_in_workspace():
             # make links for inputs in workspace
@@ -457,6 +465,7 @@ class Workflow:
             for item, paths in abs_given.items():
                 links = []
                 for p in paths:
+                    assert os.path.exists(p), f"given [{p}] doesn't exist"
                     linked = input_dir.joinpath(p.name)
                     if linked.exists(): os.remove(linked)
                     os.symlink(p, linked)
@@ -476,7 +485,6 @@ class Workflow:
                 return
 
             print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
-
             executor.PrepareRun(steps, self.INPUT_DIR, params)
 
             jobs_ran: dict[str, JobInstance] = {}
@@ -492,7 +500,7 @@ class Workflow:
                     if jid in jobs_ran: continue
                     header = f"{_timestamp()} {job.step.name}:{jid}"
                     print(f"{header} started")
-                    _run_job_async(job, lambda: executor.Run(job, workspace, params))
+                    _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy()))
                     jobs_ran[jid] = job
 
                 try:
@@ -513,9 +521,6 @@ class Workflow:
                 state.Save()
 
         original_dir = os.getcwd()
-        # os.makedirs(workspace, exist_ok=True)
-        # os.chdir(workspace)
-        # _run_in_workspace()
         try:
             os.makedirs(workspace, exist_ok=True)
             os.chdir(workspace)
@@ -525,4 +530,4 @@ class Workflow:
             print(f"ERROR: {e}")
         finally:
             os.chdir(original_dir)
-            return not watcher.kill_now
+ 

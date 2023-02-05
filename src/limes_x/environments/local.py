@@ -22,26 +22,23 @@ if __name__ == '__main__':
             if line == "": continue
             # timestamp = f"{dt.now().strftime('%d%b%Y-%H:%M:%S')}>"
             timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
-            prepped = f"{CONTEXT.shell_prefix} {line}"
             cmd_history.append(f"{timestamp} {line}")
             def _on_io(s: str, log: list):
                 if s.endswith('\n'): s = s[:-1]
                 log.append(f'{timestamp} {s}')
 
-            code = LiveShell(
-                prepped, echo_cmd=False,
-                onOut=lambda s: _on_io(s, out_log),
-                onErr=lambda s: _on_io(s, err_log),
-            )
-            if code != 0:
-                return code
+        code = LiveShell(
+            CONTEXT.shell_prefix+" "+cmd, echo_cmd=False,
+            onOut=lambda s: _on_io(s, out_log),
+            onErr=lambda s: _on_io(s, err_log),
+        )
+        if code != 0:
+            return code
 
         return code
 
     CONTEXT.shell = _shell
     CONTEXT.output_folder = RELATIVE_OUTPUT_PATH
-    CONTEXT.lib = MODULE_PATH.joinpath('lib')
-    CONTEXT.ref = MODULE_PATH.joinpath('ref')
 
     os.chdir(WORKSPACE)
     # monitor = ResourceMonitor(relative_output_path)

@@ -4,6 +4,7 @@ from pathlib import Path
 import uuid
 
 if __name__ == '__main__':
+    NO_ZIP = sys.argv.pop().split(":")
     TMP_NAME = sys.argv.pop()
     TMP = Path(os.environ.get(TMP_NAME, '/tmp'))
     LIB = sys.argv.pop()
@@ -13,8 +14,8 @@ if __name__ == '__main__':
     while CLOUD_SPACE is None or CLOUD_SPACE.exists():
         CLOUD_SPACE = TMP.joinpath(f'limes_x-{uuid.uuid4().hex}')
     CLOUD_WS = CLOUD_SPACE.joinpath('workspace')
-    CLOUD_LIB = CLOUD_SPACE.joinpath('lib')
-    os.makedirs(CLOUD_WS)
+    CLOUD_LIB = CLOUD_SPACE.joinpath('lib'); os.makedirs(CLOUD_WS)
+    CLOUD_REF = CLOUD_SPACE.joinpath('ref'); os.makedirs(CLOUD_REF)
     os.chdir(CLOUD_WS)
     os.system(f'mkdir -p {CLOUD_LIB} && tar -hxf {LIB} -C {CLOUD_LIB}')
 
@@ -37,11 +38,13 @@ if __name__ == '__main__':
             unzipped.add(output)
 
     import limes_x.environments.local as env
+    from limes_x.execution.modules import ComputeModule
     from limes_x.common.utils import LiveShell
 
     cmd_history = []
     err_log, out_log = [], []
     def _shell(cmd: str):
+        cmd = cmd.replace("  ", "")
         lines = cmd.split('\n')
         for line in lines:
             line = line.strip()
@@ -58,32 +61,50 @@ if __name__ == '__main__':
         )
 
     # print(sys.argv, limes_x.__name__)
+    newline = '\n'
     lib_name = env.__name__
     module_name = str(MODULE_PATH).split('/')[-1]
     _shell(f"""\
         echo $(date) "setting up env"
         mkdir -p {CLOUD_LIB}/{module_name}
-        cp -r {MODULE_PATH}/lib {CLOUD_LIB}/{module_name}
-        tar -hxf {MODULE_PATH}/ref.tgz -C {CLOUD_LIB}/{module_name}
+        cp -r {MODULE_PATH}/{ComputeModule.LIB_FOLDER} {CLOUD_LIB}/{module_name}
         cd {CLOUD_WS}
-        cp {WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH)}/*.json {RELATIVE_OUTPUT_PATH}/
         ls -lh
+    """)
+
+    requirements = [str(CONTEXT.params.reference_folder.joinpath(req)) for req in THIS_MODULE.requirements]
+    zreqs, cpreqs = [], []
+    for r in requirements:
+        if any(r.endswith(e) for e in NO_ZIP):
+            cpreqs.append(r)
+        else:
+            zreqs.append(r)
+    _shell(f"""\
+        echo $(date) "setting up requirements"
+        cd {CLOUD_REF}
+        {newline.join(f"tar -hxf {req}" for req in zreqs)}
+        {newline.join(f"cp {req} ./" for req in cpreqs)}
+        ls -lh
+    """)
+    CONTEXT.params.reference_folder = CLOUD_REF
+    CONTEXT.lib = CLOUD_LIB
+    CONTEXT.Save(CLOUD_WS)
+
+    _shell(f"""\
         echo $(date) "starting"
         python {env.__file__} {CLOUD_LIB}/{module_name} {CLOUD_WS} {RELATIVE_OUTPUT_PATH} \
     """.replace("  ", ""))
-
     BL = {
         'context.json',
         'result.json'
     }
     outs = [f for f in os.listdir(RELATIVE_OUTPUT_PATH) if f not in BL]
-    newline = '\n'
     _shell(f"""\
         echo $(date) "gathering results"
         cd {RELATIVE_OUTPUT_PATH}
-        ls -lh
         {newline.join(f"tar -cf - {f} | pigz -5 -p {CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/{f}.tgz" for f in outs)}
         echo $(date) "done"
+        du -sh *
     """.replace("  ", ""))
 
     result_json = 'result.json'
