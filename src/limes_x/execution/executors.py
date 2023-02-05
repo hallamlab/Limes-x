@@ -24,7 +24,7 @@ class Job:
         c.output_folder = Path(f"{self.instance.step.name}--{self.instance.GetID()}")
         c.params = params.Copy()
         c.lib = instance.step.location.joinpath(ComputeModule.LIB_FOLDER)
-        c.manifest = dict((Item(k), [ii.path for ii in v] if isinstance(v, list) else v.path) for k, v in self.instance.inputs.items())
+        c.manifest = dict((Item(k), [ii.obj for ii in v] if isinstance(v, list) else v.obj) for k, v in self.instance.inputs.items())
         c.Save(workspace)
         self.context = c
 

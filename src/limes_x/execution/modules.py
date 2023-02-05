@@ -74,7 +74,7 @@ class JobContext(AutoPopulate):
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
-    manifest: dict[Item, Path|list[Path]]
+    manifest: dict[Item, dict|list[dict]]
     job_id: str
     lib: Path
 
@@ -91,7 +91,7 @@ class JobContext(AutoPopulate):
                 v = { # switch
                     'shell': lambda: None,
                     'params': lambda: v.ToDict(),
-                    'manifest': lambda: dict((mk.key, [str(p) for p in mv] if isinstance(mv, list) else str(mv)) for mk, mv in v.items()),
+                    'manifest': lambda: v,
                 }.get(k, lambda: str(v))()
                 d[k] = v
             json.dump(d, j, indent=4)
@@ -109,7 +109,7 @@ class JobContext(AutoPopulate):
                     'shell': lambda: None,
                     'params': lambda: Params.FromDict(v),
                     'output_folder': lambda: Path(v),
-                    'manifest': lambda: dict((Item(mk), [Path(p) for p in mv] if isinstance(mv, list) else Path(mv)) for mk, mv in v.items()),
+                    'manifest': lambda: v,
                 }.get(k, lambda: str(v))()
                 kwargs[k] = v
             if 'shell_prefix' not in d:

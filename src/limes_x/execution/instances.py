@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from typing import Callable, Any
 from pathlib import Path
 
@@ -92,18 +93,18 @@ class JobInstance(_with_hashable_id):
         return inst
 
 class ItemInstance(_with_hashable_id):
-    def __init__(self, id_gen: Callable[[int], str], item:Item, path: Path, made_by: JobInstance|None=None) -> None:
+    def __init__(self, id_gen: Callable[[int], str], item:Item, obj: dict, made_by: JobInstance|None=None) -> None:
         super().__init__(id_gen(12))
         self.item_name = item.key
-        self.path = path
+        self.obj = obj
         self.made_by = made_by
     
     def __repr__(self) -> str:
         return f"<ii: {self.item_name}>"
 
     def ToDict(self):
-        self_dict = {
-            "path": str(self.path),
+        self_dict: dict[str, Any] = {
+            "obj": self.obj,
         }
         if self.made_by is not None:
             self_dict["made_by"] = self.made_by.GetID()
@@ -112,7 +113,7 @@ class ItemInstance(_with_hashable_id):
     @classmethod
     def FromDict(cls, item: Item, id: str, data: dict, job_instance_ref: dict[str, JobInstance], given: set[str]):
         get_id = lambda _: id
-        path = data["path"]
+        obj = data["obj"]
         made_by_id = data.get("made_by")
 
         if id not in given:
@@ -120,4 +121,4 @@ class ItemInstance(_with_hashable_id):
             made_by = job_instance_ref[made_by_id] if made_by_id is not None else None
         else:
             made_by = None # was given
-        return ItemInstance(get_id, item, path, made_by=made_by)
+        return ItemInstance(get_id, item, obj, made_by=made_by)
