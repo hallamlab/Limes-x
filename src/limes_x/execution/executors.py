@@ -15,7 +15,7 @@ class Job:
     run_command: str
     workspace: Path
 
-    def __init__(self, instance: JobInstance, workspace: Path, params: Params) -> None:
+    def __init__(self, instance: JobInstance, workspace: Path, params: Params, _save=True) -> None:
         self.instance = instance
         self.workspace = workspace
 
@@ -25,7 +25,7 @@ class Job:
         c.params = params.Copy()
         c.lib = instance.step.location.joinpath(ComputeModule.LIB_FOLDER)
         c.manifest = dict((Item(k), [ii.value for ii in v] if isinstance(v, list) else v.value) for k, v in self.instance.inputs.items())
-        c.Save(workspace)
+        if _save: c.Save(workspace)
         self.context = c
 
     def Shell(self, cmd: str):
@@ -50,12 +50,17 @@ class Executor:
         if step.memory_gb is not None: params.mem_gb = step.memory_gb
         return job
 
-    def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
+    def _make_job(self, instance: JobInstance, workspace: Path, params: Params, _save=True):
         job = self._overload_params(Job(
             instance = instance,
             workspace = workspace,
             params = params,
+            _save = _save,
         ))
+        return job
+
+    def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
+        job = self._make_job(instance, workspace, params)
 
         from ..environments import local
         entry_point = Path(os.path.abspath(inspect.getfile(local)))
@@ -87,6 +92,9 @@ class Executor:
                 with open(result_json) as j:
                     r = JobResult.FromDict(json.load(j))
                     r.made_by = job.GetID()
+                    if r.manifest is None:
+                        r.error_message = "no output created"
+                        r.manifest = {}
                     return r
             except Exception as e:
                 err_msg = f'result manifest corrupted'
@@ -117,6 +125,7 @@ class CloudExecutor(Executor):
             HERE = os.getcwd()
             NEWL = '\n'
             EXT = self._EXT
+            THREADS = params.logistic_threads if params.logistic_threads is not None else params.threads
 
             ## requirements ##
             if os.path.exists(params.reference_folder):
@@ -127,7 +136,7 @@ class CloudExecutor(Executor):
                         requirements.remove(req)
                 _shell(f"""\
                     cd {params.reference_folder}
-                    {NEWL.join(f"tar -hcf - {req} | pigz -5 -p {params.threads} >{req}.{EXT}" for req in requirements)}
+                    {NEWL.join(f"tar -hcf - {req} | pigz -5 -p {THREADS} >{req}.{EXT}" for req in requirements)}
                 """)
             else:
                 print('no references given')
@@ -149,7 +158,7 @@ class CloudExecutor(Executor):
 
             _shell(f"""\
                 cd inputs
-                {NEWL.join(f"tar -hcf - {f} | pigz -5 -p {params.threads} >{f}.{EXT}" for f in to_zip)}
+                {NEWL.join(f"tar -hcf - {f} | pigz -5 -p {THREADS} >{f}.{EXT}" for f in to_zip)}
             """)
 
             ## limes_x env ##
@@ -157,17 +166,29 @@ class CloudExecutor(Executor):
             src = os.path.abspath(Path(os.path.dirname(inspect.getfile(limes_x))).joinpath('..'))
             _shell(f"""\
                 cd {src}
-                tar --exclude=__pycache__ -hcf - {limes_x.__name__} | pigz -5 -p {params.threads} >{HERE}/{self._SRC_FOLDER_NAME}.{EXT}
+                tar --exclude=__pycache__ -hcf - {limes_x.__name__} | pigz -5 -p {THREADS} >{HERE}/{self._SRC_FOLDER_NAME}.{EXT}
             """)
             if prerun is not None: prerun(inputs_dir)
         super().__init__(execute_procedure, _prepare_run)
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
-        job = self._overload_params(Job(
-            instance = instance,
-            workspace = workspace,
-            params = params,
-        ))
+        job = self._make_job(instance, workspace, params, _save=False)
+        threads = params.logistic_threads if params.logistic_threads is not None else params.threads
+        if instance.step.is_logistical:
+            res = super().Run(instance, workspace, params)
+            out_dir = job.context.output_folder
+            BL = {"context.json", "result.json"}
+            to_zip = []
+            for f in os.listdir(out_dir):
+                if f in BL: continue
+                to_zip.append(f)
+            NL = '\n'
+            LiveShell(f"""\
+                cd {job.context.output_folder}
+                {NL.join(f"tar -hcf - {o} | pigz -5 -p {threads} >{o}.{self._EXT}" for o in to_zip)}
+            """.replace("  ", ""), echo_cmd=False)
+            return res
+        job.context.Save(workspace)
 
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))

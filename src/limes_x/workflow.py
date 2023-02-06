@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os, sys
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 import json
 import uuid
 from threading import Thread, Condition
@@ -200,7 +200,10 @@ class WorkflowState(PrivateInit):
             haves = self._item_lookup[i.key]
             reserved = 0
             for ii in haves:
-                if ii in self._item_instance_reservations: reserved += 1
+                if ii in self._item_instance_reservations:
+                    jis = self._item_instance_reservations[ii]
+                    if any(ji.step.name == module.name for ji in jis):
+                        reserved += 1
             if reserved >= len(haves): return False
         return True
 
@@ -262,16 +265,27 @@ class WorkflowState(PrivateInit):
     def Update(self):
         for module in self._steps:
             if not self._satisfies(module): continue
+            class _namespace:
+                def __init__(self) -> None:
+                    self.space: dict[str, ItemInstance|list[ItemInstance]] = {}
+                    self.grouped_by: set[ItemInstance] = set()
+
+                def Copy(self):
+                    new = _namespace()
+                    new.space = self.space.copy()
+                    new.grouped_by = self.grouped_by.copy()
+                    return new
 
             class Namespaces:
                 def __init__(self) -> None:
-                    self.namespaces: list[dict[str, ItemInstance|list[ItemInstance]]] = [{}]
+                    self.namespaces: list[_namespace] = [_namespace()]
+
                 def AddMapping(self, i: str, inst_or_list: ItemInstance|list[ItemInstance]):
                     for ns in self.namespaces:
-                        ns[i] = inst_or_list
+                        ns.space[i] = inst_or_list
 
                 # assumes all instances are of the same item
-                def Split(self, groups: list[list[ItemInstance]]):
+                def Split(self, groups: list[list[ItemInstance]], grouped_bys: list[ItemInstance]|None=None):
                     def _kv(grp: list[ItemInstance]):
                         rep = grp[0].item_name
                         return (rep, grp if len(grp)>1 else grp[0])
@@ -280,14 +294,35 @@ class WorkflowState(PrivateInit):
                         grp = groups[0]
                         self.AddMapping(*_kv(grp))
 
+                    if grouped_bys is None:
+                        _grouped_bys = [None for _ in groups]
+                    else:
+                        assert len(grouped_bys) == len(groups), f"|group by| != |groups| {grouped_bys}, {groups}"
+                        _grouped_bys = grouped_bys
+
                     new_nss = []
                     for ns in self.namespaces:
-                        for grp in groups:
-                            clone = ns.copy()
+                        for gb, grp in zip(_grouped_bys, groups):
+                            clone = ns.Copy()
+                            if gb is not None:
+                                clone.grouped_by.add(gb)
+                                ns.grouped_by.add(gb)
                             rep, v = _kv(grp)
-                            clone[rep] = v
+                            clone.space[rep] = v
                             new_nss.append(clone)
                     self.namespaces = new_nss
+
+                def MergeGroups(self, item_name: str, groups: dict[ItemInstance, set[ItemInstance]]):
+                    found = False
+                    for gb, group in groups.items():
+                        for ns in self.namespaces:
+                            if gb in ns.grouped_by:
+                                found = True
+                                ns.space[item_name] = list(group)
+                                break
+
+                    if not found:
+                        self.Split([list(g) for g in groups.values()], [k for k in groups])
 
             namespaces = Namespaces()
             outer_continue = False
@@ -317,7 +352,7 @@ class WorkflowState(PrivateInit):
                         if any(module in [ji.step for ji in self._item_instance_reservations.get(ii, set())] for ii in grp):
                             del groups[k]
 
-                    namespaces.Split([list(g) for g in groups.values()])
+                    namespaces.MergeGroups(item_name, groups)
 
                 ## split, 1 each ##
                 elif not want_array and have_array:
@@ -329,7 +364,7 @@ class WorkflowState(PrivateInit):
 
             if outer_continue: continue
             for ns in namespaces.namespaces:
-                job_inst = JobInstance(self._gen_id, module, ns)
+                job_inst = JobInstance(self._gen_id, module, ns.space)
                 self._pending_jobs[job_inst.GetID()] = job_inst
                 self._job_instances[job_inst.GetID()] = job_inst
                 for ii in job_inst.ListInputInstances():
@@ -338,19 +373,19 @@ class WorkflowState(PrivateInit):
                     self._item_instance_reservations[ii] = lst
             self._changed = True
 
-    def RegisterJobComplete(self, job_id: str, created: dict[Item, Path|list[Path]]):
+    def RegisterJobComplete(self, job_id: str, created: dict[Item, Any]):
         del self._pending_jobs[job_id]
         job_inst = self._job_instances[job_id]
         job_inst.complete = True
 
         expected_outputs = job_inst.step.GetUnmaskedOutputs()
         outs: dict[str, ItemInstance|list[ItemInstance]] = {}
-        for item, paths in created.items():
+        for item, vals in created.items():
             if item not in expected_outputs: continue
-            if not isinstance(paths, list): paths = [paths]
+            if not isinstance(vals, list): vals = [vals]
             insts = []
-            for path in paths:
-                inst = ItemInstance(self._gen_id, item, path, made_by=job_inst)
+            for value in vals:
+                inst = ItemInstance(self._gen_id, item, value, made_by=job_inst)
                 self._register_item_inst(inst)
                 insts.append(inst)
             outs[item.key] = insts if len(insts)>1 else insts[0]
@@ -426,7 +461,8 @@ class Workflow:
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: dict[Item, str|Path|list[str|Path]],
-        executor: Executor, params: Params=Params()):
+        executor: Executor, params: Params=Params(),
+        _catch_errors: bool = True):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
@@ -457,7 +493,7 @@ class Workflow:
             th = Thread(target=_job)
             th.start()
 
-        def _run_in_workspace():
+        def _run():
             # make links for inputs in workspace
             input_dir = self.INPUT_DIR
             os.makedirs(input_dir, exist_ok=True)
@@ -524,18 +560,20 @@ class Workflow:
                 state.Save()
 
         original_dir = os.getcwd()
-        # os.makedirs(workspace, exist_ok=True)
-        # os.chdir(workspace)
-        # _run_in_workspace()
-        # print("done")
-        # os.chdir(original_dir)
-        try:
+        def _wrap_and_run():
             os.makedirs(workspace, exist_ok=True)
             os.chdir(workspace)
-            _run_in_workspace()
+            _run()
             print("done")
-        except Exception as e:
-            print(f"ERROR: {e}")
-        finally:
+
+        if not _catch_errors:
+            _wrap_and_run()
             os.chdir(original_dir)
+        else:
+            try:
+                _wrap_and_run()
+            except Exception as e:
+                print(f"ERROR: {e}")
+            finally:
+                os.chdir(original_dir)
  

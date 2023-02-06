@@ -29,6 +29,7 @@ if __name__ == '__main__':
     for item, ps in CONTEXT.manifest.items():
         if not isinstance(ps, list): ps = [ps]
         for p in ps:
+            if not isinstance(p, Path): continue
             toks = str(p).split('/')
             folder = toks[0]
             output = '/'.join(toks[:2])

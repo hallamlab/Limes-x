@@ -41,9 +41,11 @@ class Params:
         threads: int=4,
         mem_gb: int=8,
         reference_folder: Path=Path(''),
+        local_threads: int|None=None,
     ) -> None:
         self.file_system_wait_sec = file_system_wait_sec
         self.threads = threads
+        self.logistic_threads = local_threads
         self.mem_gb = mem_gb
         self.reference_folder = reference_folder
 
@@ -69,12 +71,15 @@ class Params:
 ManifestItem = str|Path|list[str|Path]
 def _manifest2dict(d: dict[Item, ManifestItem]):
     paths, strings = {}, {}
-    for item, v in d.items():
+    for item, val in d.items():
         k = item.key
-        if isinstance(v, Path):
-            paths[k] = str(v)
-        else:
-            strings[k] = str(v)
+        if not isinstance(val, list):
+            val = [val]
+        for v in val:
+            if isinstance(v, Path):
+                paths[k] = paths.get(k, []) + [str(v)]
+            else:
+                strings[k] = strings.get(k, []) + [str(v)]
     save = {}
     if len(paths)>0: save['paths'] = paths
     if len(strings)>0: save['strings'] = strings
@@ -83,8 +88,12 @@ def _manifest2dict(d: dict[Item, ManifestItem]):
 def _dict2manifest(d: dict[str, dict]):
     paths, strings = d.get('paths'), d.get('strings')
     man = {}
-    if paths is not None: man.update((Item(k), Path(p)) for k, p in paths.items())
-    if strings is not None: man.update((Item(k), s) for k, s in strings.items())
+    if paths is not None:
+        for k, ps in paths.items():
+            man[Item(k)] = [Path(p) for p in ps] if len(ps)>1 else Path(ps[0])
+    if strings is not None:
+        for k, ps in strings.items():
+            man[Item(k)] = ps if len(ps)>1 else ps[0]
     return man
 
 class JobContext(AutoPopulate):
@@ -94,7 +103,7 @@ class JobContext(AutoPopulate):
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
-    manifest: dict[Item, ManifestItem]
+    manifest: dict[Item, str|Path|list[str|Path]]
     job_id: str
     lib: Path
 
@@ -192,6 +201,7 @@ class ComputeModule(PrivateInit):
         threads: int|None = None,
         memory_gb: int|None = None,
         requirements: set[str] = set(),
+        is_logistical: bool = False,
         **kwargs
     ) -> None:
 
@@ -208,6 +218,7 @@ class ComputeModule(PrivateInit):
         self.threads = threads
         self.memory_gb = memory_gb
         self.requirements = requirements
+        self.is_logistical = is_logistical
 
     def Setup(self, reference_folder: Path, install_type: str):
         snakefile = f"{self.location}/setup/setup.smk"
@@ -296,6 +307,7 @@ class ModuleBuilder(AutoPopulate):
     _threads: int
     _memory_gb: int
     _requirements: set[str]
+    _logistical: bool
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -303,6 +315,7 @@ class ModuleBuilder(AutoPopulate):
         self._inputs = set()
         self._outputs = set()
         self._requirements = set()
+        self._logistical = False
 
     def SetProcedure(self, procedure: Callable[[JobContext], JobResult]):
         self._procedure = procedure
@@ -332,6 +345,10 @@ class ModuleBuilder(AutoPopulate):
         self._location = Path(os.path.abspath(def_path.joinpath('../..')))
         return self
 
+    def IsLogistical(self):
+        self._logistical = True
+        return self
+
     def SuggestedResources(self, threads: int, memory_gb: int):
         assert threads>0
         assert memory_gb>0
@@ -355,7 +372,8 @@ class ModuleBuilder(AutoPopulate):
             name=self._name,
             threads=self._threads,
             memory_gb=self._memory_gb,
-            requirements=self._requirements
+            requirements=self._requirements,
+            is_logistical=self._logistical
         )
         return cm
 

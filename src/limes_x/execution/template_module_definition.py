@@ -4,7 +4,7 @@ from limes_x import ModuleBuilder, Item, JobContext, JobResult
 A = Item('a')
 B = Item('b')
 
-def example_procedure(context: JobContext) -> JobResult:
+def procedure(context: JobContext) -> JobResult:
     input_path = context.manifest[A]
     output_file_name = 'copied_file'
     return JobResult(
@@ -15,7 +15,7 @@ def example_procedure(context: JobContext) -> JobResult:
     )
 
 MODULE = ModuleBuilder()\
-    .SetProcedure(example_procedure)\
+    .SetProcedure(procedure)\
     .AddInput(A, groupby=None)\
     .PromiseOutput(B)\
     .SetHome(__file__, name=None)\
