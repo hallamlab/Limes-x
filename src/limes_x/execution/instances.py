@@ -44,12 +44,21 @@ class JobInstance(_with_hashable_id):
                 insts.append(ii)
         return insts
 
+    def GetFolderName(self):
+        return f"{self.step.name}--{self.GetID()}"
+
     def ListInputInstances(self):
         return self._input_instances
 
-    def AddOutputs(self, outs: dict[str, ItemInstance|list[ItemInstance]]):
+    def Invalidate(self):
+        self.outputs = None
+        self._output_instances = None
+        self.complete = False
+
+    def MarkAsComplete(self, outs: dict[str, ItemInstance|list[ItemInstance]]):
         self.outputs = dict((i, v) for i, v in outs.items())
         self._output_instances = self._flatten_values(outs)
+        self.complete = True
 
     def ListOutputInstances(self):
         return self._output_instances

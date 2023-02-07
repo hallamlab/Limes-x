@@ -22,7 +22,7 @@ class JobError(Exception):
 
 class WorkflowState(PrivateInit):
     _FILE_NAME = 'workflow_state.json'
-    def __init__(self, path: str|Path, steps: list[ComputeModule], **kwargs) -> None:
+    def __init__(self, workspace: Path, steps: list[ComputeModule], **kwargs) -> None:
         super().__init__(_key=kwargs.get('_key'))
         self._ids: set[str] = set()
         self._job_instances: dict[str, JobInstance] = {}
@@ -33,8 +33,8 @@ class WorkflowState(PrivateInit):
         self._item_instance_reservations: dict[ItemInstance, set[JobInstance]] = {}
 
         self._steps = steps
-        self._path = Path(path)
         self._changed = False
+        self._workspace:Path = workspace
 
     def _register_item_inst(self, ii: ItemInstance):
         ilst = self._item_lookup.get(ii.item_name, [])
@@ -75,9 +75,10 @@ class WorkflowState(PrivateInit):
             "item_instances": item_instances,
             "given": self._given_item_instances,
             "item_instance_reservations": dict((ii.GetID(), [ji.GetID() for ji in jis]) for ii, jis in self._item_instance_reservations.items()),
+            "ids_from_all_runs": list(self._ids),
             "pending_jobs": list(self._pending_jobs),
         }
-        with open(self._path.joinpath(self._FILE_NAME), 'w') as j:
+        with open(self._workspace.joinpath(self._FILE_NAME), 'w') as j:
             json.dump(state, j, indent=4)
 
     @classmethod
@@ -135,7 +136,7 @@ class WorkflowState(PrivateInit):
 
             for jid, outs in job_outputs.items():
                 outs = dict((ik, item_instances[v] if isinstance(v, str) else [item_instances[iik] for iik in v]) for ik, v in outs.items())
-                job_instances[jid].AddOutputs(outs)
+                job_instances[jid].MarkAsComplete(outs)
 
             state = WorkflowState(workspace, steps, _key=cls._initializer_key)
             state._given_item_instances = list(given)
@@ -147,6 +148,7 @@ class WorkflowState(PrivateInit):
                 (item_instances[ik], {job_instances[rk] for rk in jids})
                 for ik, jids in serialized_state["item_instance_reservations"].items()
             )
+            state._ids.update(set(serialized_state['ids_from_all_runs']))
 
             for ii in item_instances.values():
                 lst = state._item_lookup.get(ii.item_name, [])
@@ -156,6 +158,7 @@ class WorkflowState(PrivateInit):
 
     @classmethod
     def MakeNew(cls, workspace: str|Path, steps: list[ComputeModule], given: dict[Item, list[Path]]):
+        workspace = Path(workspace)
         assert len({m.name for m in steps})==len(steps), f"duplicate compute module name"
         state = WorkflowState(workspace, steps, _key=cls._initializer_key)
         for ii in [ItemInstance(state._gen_id, i, p) for i, ps in given.items() for p in ps]:
@@ -376,7 +379,6 @@ class WorkflowState(PrivateInit):
     def RegisterJobComplete(self, job_id: str, created: dict[Item, Any]):
         del self._pending_jobs[job_id]
         job_inst = self._job_instances[job_id]
-        job_inst.complete = True
 
         expected_outputs = job_inst.step.GetUnmaskedOutputs()
         outs: dict[str, ItemInstance|list[ItemInstance]] = {}
@@ -389,7 +391,83 @@ class WorkflowState(PrivateInit):
                 self._register_item_inst(inst)
                 insts.append(inst)
             outs[item.key] = insts if len(insts)>1 else insts[0]
-        job_inst.AddOutputs(outs)
+        job_inst.MarkAsComplete(outs)
+
+    def Invalidate(self, items: Iterable[Item]):
+        old_save = self._workspace.joinpath(self._FILE_NAME)
+        if not old_save.exists():
+            print("invalidate did nothing since nothing has been done yet")
+            return
+
+        self._changed = True
+        deleted_job_instances: set[JobInstance] = set()
+        def _invalidate(ii: ItemInstance):
+            parent = ii.made_by
+            if parent is not None:
+                pk = parent.GetID()
+                deleted_job_instances.add(parent)
+                if pk in self._job_instances: del self._job_instances[pk]
+
+            givens = set(self._given_item_instances)
+            todo = [ii]
+            while len(todo)>0:
+                curr = todo.pop()
+                if curr.item_name in self._item_lookup: del self._item_lookup[curr.item_name]
+                if curr.GetID() in givens: continue
+                if curr not in self._item_instance_reservations: continue
+
+                for ji in self._item_instance_reservations[curr]:
+                    deleted_job_instances.add(ji)
+                    jk = ji.GetID()
+                    if jk not in self._job_instances: continue
+                    del self._job_instances[jk]
+                    if jk in self._pending_jobs: del self._pending_jobs[jk]
+                    outs = ji.ListOutputInstances()
+                    if outs is not None: todo += outs
+
+                del self._item_instance_reservations[curr]
+
+        for item in items:
+            for ii in list(self._item_lookup[item.key]):
+                _invalidate(ii)
+
+        previous_iis: set[ItemInstance] = set()
+        for p in deleted_job_instances:
+            previous_iis.update(p.ListInputInstances())
+        for ii in previous_iis:
+            if ii not in self._item_instance_reservations: continue
+            reservations = self._item_instance_reservations[ii]
+            reservations = reservations.difference(deleted_job_instances)
+            if len(reservations)>0:
+                self._item_instance_reservations[ii] = reservations
+            else:
+                del self._item_instance_reservations[ii]
+
+        i = 0
+        previous_folder = Path()
+        while True:
+            i+=1
+            previous_folder = self._workspace.joinpath(f'previous_{i:03}')
+            if previous_folder.exists(): continue
+            break
+        
+        n, ext = self._FILE_NAME.split('.')
+        old_save_renamed = self._workspace.joinpath(f'{n}_{i:03}.{ext}')
+        deleted_jobs_folders = [ji.GetFolderName() for ji in deleted_job_instances]
+        NL = '\n'
+        os.system(f"""\
+            mkdir -p {previous_folder}
+            {NL.join(f"mv {self._workspace.joinpath(f)} {previous_folder.joinpath(f)}" for f in deleted_jobs_folders)}
+            mv {old_save} 
+        """)
+
+        i = 1
+        while True:
+            old_save_renamed = f'{n}_{i:03}.{ext}'
+            if not self._workspace.joinpath(old_save_renamed).exists():
+                os.rename(old_save, old_save_renamed)
+                break
+            i += 1
 
 class Sync:
     def __init__(self) -> None:
@@ -462,6 +540,7 @@ class Workflow:
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: dict[Item, str|Path|list[str|Path]],
         executor: Executor, params: Params=Params(),
+        regenerate: Iterable[Item]=list(),
         _catch_errors: bool = True):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
@@ -517,6 +596,8 @@ class Workflow:
             steps: list[ComputeModule] = [s.reference for s in _steps]
             self._check_feasible(steps, targets, dep_map)
             state = WorkflowState.ResumeIfPossible('./', steps, inputs)
+            state.Invalidate(regenerate)
+            state.Update()
             state.Save()
 
             if len(state.GetPendingJobs()) == 0:
