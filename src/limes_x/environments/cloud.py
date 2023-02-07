@@ -83,7 +83,7 @@ if __name__ == '__main__':
     _shell(f"""\
         echo $(date) "setting up requirements"
         cd {CLOUD_REF}
-        {newline.join(f"tar -hxf {req}" for req in zreqs)}
+        {newline.join(f"tar -hxf {req}.tgz" for req in zreqs)}
         {newline.join(f"cp {req} ./" for req in cpreqs)}
         ls -lh
     """)

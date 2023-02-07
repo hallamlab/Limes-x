@@ -134,10 +134,12 @@ class CloudExecutor(Executor):
                     if os.path.exists(f'{params.reference_folder}/{req}.{EXT}'):
                         print(f'using cached {req}.{EXT}')
                         requirements.remove(req)
-                _shell(f"""\
-                    cd {params.reference_folder}
-                    {NEWL.join(f"tar -hcf - {req} | pigz -5 -p {THREADS} >{req}.{EXT}" for req in requirements)}
-                """)
+                    else:
+                        print(f'zipping {req} for cloud')
+                        _shell(f"""\
+                            cd {params.reference_folder}
+                            f"tar -hcf - {req} | pigz -5 -p {THREADS} >{req}.{EXT}" 
+                        """)
             else:
                 print('no references given')
 

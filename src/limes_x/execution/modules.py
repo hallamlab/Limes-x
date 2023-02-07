@@ -41,11 +41,11 @@ class Params:
         threads: int=4,
         mem_gb: int=8,
         reference_folder: Path=Path(''),
-        local_threads: int|None=None,
+        logistic_threads: int|None=None,
     ) -> None:
         self.file_system_wait_sec = file_system_wait_sec
         self.threads = threads
-        self.logistic_threads = local_threads
+        self.logistic_threads = logistic_threads
         self.mem_gb = mem_gb
         self.reference_folder = reference_folder
 
@@ -357,7 +357,7 @@ class ModuleBuilder(AutoPopulate):
         return self
 
     def Requires(self, requirements: set[str]):
-        self._requirements = requirements
+        self._requirements.update(requirements)
         return self
 
     def Build(self):
