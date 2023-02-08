@@ -3,7 +3,7 @@ import os, sys
 import time
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 import inspect
 from .modules import ComputeModule, JobContext, JobResult, Params, Item
 from .instances import JobInstance
@@ -59,7 +59,7 @@ class Executor:
         ))
         return job
 
-    def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
+    def Run(self, instance: JobInstance, workspace: Path, params: Params, targets: Iterable[Item]) -> JobResult:
         job = self._make_job(instance, workspace, params)
 
         from ..environments import local
@@ -93,7 +93,7 @@ class Executor:
                     r = JobResult.FromDict(json.load(j))
                     r.made_by = job.GetID()
                     if r.manifest is None:
-                        r.error_message = "no output created"
+                        r.error_message = f"no output created{'' if r.error_message is None else f', err: {r.error_message}'}"
                         r.manifest = {}
                     return r
             except Exception as e:
@@ -138,7 +138,7 @@ class CloudExecutor(Executor):
                         print(f'zipping {req} for cloud')
                         _shell(f"""\
                             cd {params.reference_folder}
-                            f"tar -hcf - {req} | pigz -5 -p {THREADS} >{req}.{EXT}" 
+                            tar -hcf - {req} | pigz -5 -p {THREADS} >{req}.{EXT}
                         """)
             else:
                 print('no references given')
@@ -173,18 +173,18 @@ class CloudExecutor(Executor):
             if prerun is not None: prerun(inputs_dir)
         super().__init__(execute_procedure, _prepare_run)
 
-    def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
+    def Run(self, instance: JobInstance, workspace: Path, params: Params, targets: Iterable[Item]) -> JobResult:
         job = self._make_job(instance, workspace, params, _save=False)
         threads = params.logistic_threads if params.logistic_threads is not None else params.threads
+        NL = '\n'
         if instance.step.is_logistical:
-            res = super().Run(instance, workspace, params)
+            res = super().Run(instance, workspace, params, targets)
             out_dir = job.context.output_folder
             BL = {"context.json", "result.json"}
             to_zip = []
             for f in os.listdir(out_dir):
                 if f in BL: continue
                 to_zip.append(f)
-            NL = '\n'
             LiveShell(f"""\
                 cd {job.context.output_folder}
                 {NL.join(f"tar -hcf - {o} | pigz -5 -p {threads} >{o}.{self._EXT}" for o in to_zip)}
@@ -199,4 +199,16 @@ class CloudExecutor(Executor):
                 {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} SLURM_TMPDIR {":".join(self._NO_ZIP)} \
         """.replace("  ", "")
         success, msg = self._execute_procedure(job)
-        return self._compile_result(job, success, msg)
+        result = self._compile_result(job, success, msg)
+
+        # extract if produced target
+        if result.manifest is not None:
+            for k, v in result.manifest.items():
+                if k not in targets: continue
+                if isinstance(v, Path): v = [v]
+                LiveShell(f"""\
+                    cd {job.context.output_folder}
+                    {NL.join(f"tar -hxf {path.relative_to(job.context.output_folder)}.{self._EXT}" for path in v)}
+                """.replace("  ", ""), echo_cmd=False)
+
+        return result

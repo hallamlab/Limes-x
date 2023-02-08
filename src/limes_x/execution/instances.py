@@ -24,7 +24,6 @@ class JobInstance(_with_hashable_id):
         inputs: dict[str, ItemInstance|list[ItemInstance]]) -> None:
         super().__init__(id_gen(JobInstance.__ID_LENGTH))
         self.step = step
-
         self.inputs = inputs
         self._input_instances = self._flatten_values(self.inputs)
 
@@ -110,7 +109,7 @@ class ItemInstance(_with_hashable_id):
         self.made_by = made_by
     
     def __repr__(self) -> str:
-        return f"<ii: {self.item_name}>"
+        return f"<ii: {self.item_name}:{self.GetID()}>"
 
     def ToDict(self):
         self_dict: dict[str, Any] = {

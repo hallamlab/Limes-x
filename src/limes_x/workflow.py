@@ -26,6 +26,7 @@ class WorkflowState(PrivateInit):
         super().__init__(_key=kwargs.get('_key'))
         self._ids: set[str] = set()
         self._job_instances: dict[str, JobInstance] = {}
+        self._job_signatures: dict[str, JobInstance] = {} # key is "hash" of inputs
         self._item_lookup: dict[str, list[ItemInstance]] = {}
         self._given_item_instances: list[str] = []
 
@@ -33,8 +34,24 @@ class WorkflowState(PrivateInit):
         self._item_instance_reservations: dict[ItemInstance, set[JobInstance]] = {}
 
         self._steps = steps
+        self._completed_modules: list[str] = []
+        self._input_to_steps = self._make_input_to_steps_mapping(steps)
+        self._group_by_paths: dict[tuple[str, str], list[str]] = {}
+        for s in steps:
+            for target, start in s._group_by.items():
+                group_by_path = self._find_group_by_path(start.key, target.key)
+                assert group_by_path is not None, f"[{target.key}] group by [{start.key}] for [{s.name}] is invalid for this set of compute modules. No path between"
+                self._group_by_paths[(target.key, start.key)] = group_by_path
+
         self._changed = False
         self._workspace:Path = workspace
+
+    def _make_input_to_steps_mapping(self, steps: list[ComputeModule]):
+        mapping: dict[str, list[ComputeModule]] = {}
+        for s in steps:
+            for i in s.inputs:
+                mapping[i.key] = mapping.get(i.key, []) + [s]
+        return mapping
 
     def _register_item_inst(self, ii: ItemInstance):
         ilst = self._item_lookup.get(ii.item_name, [])
@@ -64,7 +81,7 @@ class WorkflowState(PrivateInit):
                 d = {"item": i.key}
                 ins.append(d)
             md["in"] = ins
-            md["input_groups"] = dict((k.key, v.key) for k, v in m._group_by.items())
+            if len(m._group_by)>0: md["input_groups"] = dict((k.key, v.key) for k, v in m._group_by.items())
             md["out"] = [i.key for i in m.outputs]
             if len(m.output_mask)>0: md["unused_out"] = [i.key for i in m.output_mask]
             modules[m.name] = md
@@ -72,10 +89,10 @@ class WorkflowState(PrivateInit):
         state = {
             "modules": modules,
             "module_executions": jobs_by_step,
+            "completed_modules": self._completed_modules,
             "item_instances": item_instances,
             "given": self._given_item_instances,
             "item_instance_reservations": dict((ii.GetID(), [ji.GetID() for ji in jis]) for ii, jis in self._item_instance_reservations.items()),
-            "ids_from_all_runs": list(self._ids),
             "pending_jobs": list(self._pending_jobs),
         }
         with open(self._workspace.joinpath(self._FILE_NAME), 'w') as j:
@@ -139,16 +156,16 @@ class WorkflowState(PrivateInit):
                 job_instances[jid].MarkAsComplete(outs)
 
             state = WorkflowState(workspace, steps, _key=cls._initializer_key)
+            state._completed_modules = serialized_state["completed_modules"]
             state._given_item_instances = list(given)
             state._ids.update(item_instances)
             state._ids.update(job_instances)
-            state._job_instances = job_instances
+            state._job_signatures = dict((state._get_signature(list(ji.inputs.values())), ji) for ji in job_instances.values())
             state._pending_jobs = dict((k, job_instances[k]) for k in serialized_state["pending_jobs"])
             state._item_instance_reservations = dict(
                 (item_instances[ik], {job_instances[rk] for rk in jids})
                 for ik, jids in serialized_state["item_instance_reservations"].items()
             )
-            state._ids.update(set(serialized_state['ids_from_all_runs']))
 
             for ii in item_instances.values():
                 lst = state._item_lookup.get(ii.item_name, [])
@@ -178,7 +195,6 @@ class WorkflowState(PrivateInit):
                 else:
                     produced[item] = step
 
-        state.Update()
         return state
 
     @classmethod
@@ -197,177 +213,200 @@ class WorkflowState(PrivateInit):
         self._ids.add(id)
         return id
 
-    def _satisfies(self, module: ComputeModule):
-        for i in module.inputs:
-            if i.key not in self._item_lookup: return False
-            haves = self._item_lookup[i.key]
-            reserved = 0
-            for ii in haves:
-                if ii in self._item_instance_reservations:
-                    jis = self._item_instance_reservations[ii]
-                    if any(ji.step.name == module.name for ji in jis):
-                        reserved += 1
-            if reserved >= len(haves): return False
-        return True
+    def _get_signature(self, inputs: list[ItemInstance|list[ItemInstance]]):
+        inputs_list = [ii for g in [g if isinstance(g, list) else [g] for g in inputs] for ii in g]
+        input_keys = sorted(ii.GetID() for ii in inputs_list)
+        signature = "-".join(input_keys)
+        return signature
 
     def GetPendingJobs(self):
         return list(self._pending_jobs.values())        
 
-    def _group_by(self, item_name: str, by_name: str):
-        def _next_steps(step: ComputeModule):
-            outs = step.GetUnmaskedOutputs()
-            for cm in self._steps:
-                if any((i in outs) for i in cm.inputs):
-                    yield cm
+    def _find_group_by_path(self, start: str, target: str):
+        class Todo:
+            def __init__(self, node: str, path: list[str]) -> None:
+                self.node = node
+                self.path = path
 
-        for ji in self._pending_jobs.values():
-            step = ji.step
-            steps_to_check = [step]
-            while len(steps_to_check) > 0:
-                curr = steps_to_check.pop()
-                if any(i.key==item_name for i in curr.GetUnmaskedOutputs()):
-                    return {} # still pending
-                steps_to_check += _next_steps(curr)
-        
-        _parent_cache = {}
-        groups: dict[ItemInstance, set[ItemInstance]] = {}
-        if item_name == by_name: return dict((i, {i}) for i in self._item_lookup[item_name])
-
-        one_path: list[ItemInstance|JobInstance] = []
-        def _handle_base_case(candidate: ItemInstance, member: ItemInstance, path: list[ItemInstance|JobInstance]):
-            if candidate in _parent_cache:
-                parent = _parent_cache[candidate]
-            elif candidate.item_name == by_name:
-                nonlocal one_path
-                if len(one_path)==0: one_path = path
-                parent = candidate
-            else:
-                return False
-
-            grp = groups.get(parent, set())
-            grp.add(member)
-            groups[parent] = grp
-            for inst in path:
-                _parent_cache[inst] = parent
-            return True
-
-        todo: list[tuple[ItemInstance, ItemInstance, list[ItemInstance|JobInstance]]] = [
-            (ii, ii, [ii]) for ii in self._item_lookup[item_name]
-        ]
+        todo: list[Todo] = [Todo(start, [])]
+        candidate = []
         while len(todo)>0:
-            original, ii, path = todo.pop() # dfs to maximize utility of parent cache
-            if _handle_base_case(ii, original, path): continue
+            t = todo.pop()
+            curr, path = t.node, t.path
+            if curr == target and len(path)+1 > len(candidate):
+                candidate = path+[curr] # found one, but want longest
 
-            ji = ii.made_by
-            if ji is None: continue # is original input
-            consumed = ji.ListInputInstances()
-            todo += [(original, in_i, path+[ji, in_i]) for in_i in consumed]
+            for job in self._input_to_steps.get(curr, []):
+                todo += [Todo(o.key, path+[curr, job.name]) for o in job.GetUnmaskedOutputs()]
+        return None if len(candidate) == 0 else candidate
 
+    def _group_by(self, target: str, by: str):
+        if by not in self._item_lookup: return {} # item to group by hasn't been made yet
+        # instance may be used more than once by same compute module
+        # due to cross/product of 2 or more inputs as lists
+        starting_points = [ii for ii in self._item_lookup[by]] 
+        if len(starting_points) == 0: return {}
+        if target == by: return dict((i, [i]) for i in self._item_lookup[target])
+
+        # can't just do tree search since some paths may not reach target
+        path = self._group_by_paths.get((target, by))
+        if path is None: return {} # not valid grouping, there is an assert in the constructor
+
+        def _get_group(start: ItemInstance):
+            class Todo:
+                def __init__(self, node: ItemInstance|JobInstance, depth: int) -> None:
+                    self.node = node
+                    self.depth = depth
+
+            group: list[ItemInstance] = []
+            todo = [Todo(start, 0)]
+            while len(todo)>0:
+                t = todo.pop(0)
+                instance, depth = t.node, t.depth
+                if isinstance(instance, ItemInstance) and instance.item_name == target:
+                    group.append(instance)
+                    continue # found leaf (target) of @start
+
+                next_name = path[depth+1]
+                if isinstance(instance, ItemInstance):
+                    res = [j for j in self._item_instance_reservations.get(instance, []) if j.step.name == next_name]
+                    if len(res) == 0: return [] # item is intermediate and not used, so chain broken
+                    for j in res:
+                        todo.append(Todo(j, depth+1))
+                else:
+                    if not instance.complete: return [] # pending job found in group
+                    outs = instance.ListOutputInstances()
+                    if outs is None: continue # was marked complete, so maybe just a failed job
+                    for i in outs:
+                        if i.item_name != next_name: continue
+                        todo.append(Todo(i, depth+1))
+            return group
+
+        groups: dict[ItemInstance, list[ItemInstance]] = {}
+        for s in starting_points:
+            g = _get_group(s)
+            if len(g)==0: continue
+            groups[s] = g
         return groups
 
     def Update(self):
-        for module in self._steps:
-            if not self._satisfies(module): continue
-            class _namespace:
-                def __init__(self) -> None:
-                    self.space: dict[str, ItemInstance|list[ItemInstance]] = {}
-                    self.grouped_by: set[ItemInstance] = set()
+        def _satisfies(module: ComputeModule):
+            for i in module.inputs:
+                if i.key not in self._item_lookup: return False
+            return True
 
-                def Copy(self):
-                    new = _namespace()
-                    new.space = self.space.copy()
-                    new.grouped_by = self.grouped_by.copy()
-                    return new
+        class _namespace:
+            def __init__(self) -> None:
+                self._space: dict[str, list[ItemInstance]] = {} # key is item
+                self._grouped_by: dict[str, ItemInstance] = {} # key is item
 
-            class Namespaces:
-                def __init__(self) -> None:
-                    self.namespaces: list[_namespace] = [_namespace()]
+            def Copy(self):
+                new = _namespace()
+                new._space = self._space.copy()
+                new._grouped_by = self._grouped_by.copy()
+                return new
 
-                def AddMapping(self, i: str, inst_or_list: ItemInstance|list[ItemInstance]):
-                    for ns in self.namespaces:
-                        ns.space[i] = inst_or_list
+            def Add(self, instances: ItemInstance|list[ItemInstance]):
+                if isinstance(instances, list):
+                    item_name = next(iter(instances)).item_name
+                    to_add = instances
+                else:
+                    item_name = instances.item_name
+                    to_add = [instances]
+                self._space[item_name] = self._space.get(item_name, []) + to_add
 
-                # assumes all instances are of the same item
-                def Split(self, groups: list[list[ItemInstance]], grouped_bys: list[ItemInstance]|None=None):
-                    def _kv(grp: list[ItemInstance]):
-                        rep = grp[0].item_name
-                        return (rep, grp if len(grp)>1 else grp[0])
+            # root is the "by" in group by
+            def GetRootInstance(self, item_name: str):
+                return self._grouped_by.get(item_name)
 
-                    if len(groups) == 1:
-                        grp = groups[0]
-                        self.AddMapping(*_kv(grp))
+            def RegisterRootInstance(self, instance: ItemInstance):
+                self._grouped_by[instance.item_name] = instance
 
-                    if grouped_bys is None:
-                        _grouped_bys = [None for _ in groups]
+        class Namespaces:
+            def __init__(self) -> None:
+                self.namespaces: list[_namespace] = [_namespace()]
+
+            def Cross(self, group: list[ItemInstance]):
+                new_nss: list[_namespace] = []
+                for ns in self.namespaces:
+                    for iis in group:
+                        new = ns.Copy()
+                        new.Add(iis)
+                        new_nss.append(new)
+                self.namespaces = new_nss
+
+            def MergeGroup(self, group: dict[ItemInstance, list[ItemInstance]]):
+                root_item_name = next(iter(group)).item_name
+                roots = {r for r in [ns.GetRootInstance(root_item_name) for ns in self.namespaces] if r is not None}
+                roots = roots.intersection(group)
+
+                intersection = []
+                for ns in self.namespaces:
+                    for k in roots:
+                        ns_root = ns.GetRootInstance(root_item_name)
+                        if ns_root is None or ns_root.GetID() != k.GetID(): continue
+                        ns.Add(group[k])
+                        intersection.append(ns)
+                self.namespaces = intersection
+
+            def CrossGroup(self, group: dict[ItemInstance, list[ItemInstance]]):
+                new_nss: list[_namespace] = []
+                for ns in self.namespaces:
+                    for root, iis in group.items():
+                        new = ns.Copy()
+                        new.Add(iis)
+                        new.RegisterRootInstance(root)
+                        new_nss.append(new)
+                self.namespaces = new_nss
+
+            def Compile(self):
+                return [ns._space for ns in self.namespaces]
+
+        def _gather_inputs(module: ComputeModule):
+            input_groups: dict[str, list[ItemInstance]|dict[ItemInstance, list[ItemInstance]]] = {}
+            for input in module.inputs:
+                group_by = module.Grouped(input)
+                if group_by is None:
+                    instances = self._item_lookup.get(input.key)
+                    if instances is None: return None
+                    input_groups[input.key] = instances
+                else:
+                    group = self._group_by(input.key, group_by.key)
+                    if len(group)==0: return None
+                    input_groups[input.key] = group
+
+            input_namespaces = Namespaces()
+            seen_roots = set() # item names
+            for item_name, dict_or_list in input_groups.items():
+                if isinstance(dict_or_list, list):
+                    input_namespaces.Cross(dict_or_list)
+                else: # is dict
+                    root = next(iter(dict_or_list)).item_name
+                    if root in seen_roots:
+                        input_namespaces.MergeGroup(dict_or_list)
                     else:
-                        assert len(grouped_bys) == len(groups), f"|group by| != |groups| {grouped_bys}, {groups}"
-                        _grouped_bys = grouped_bys
+                        input_namespaces.CrossGroup(dict_or_list)
+                        seen_roots.add(root)
 
-                    new_nss = []
-                    for ns in self.namespaces:
-                        for gb, grp in zip(_grouped_bys, groups):
-                            clone = ns.Copy()
-                            if gb is not None:
-                                clone.grouped_by.add(gb)
-                                ns.grouped_by.add(gb)
-                            rep, v = _kv(grp)
-                            clone.space[rep] = v
-                            new_nss.append(clone)
-                    self.namespaces = new_nss
+            return input_namespaces.Compile()
 
-                def MergeGroups(self, item_name: str, groups: dict[ItemInstance, set[ItemInstance]]):
-                    found = False
-                    for gb, group in groups.items():
-                        for ns in self.namespaces:
-                            if gb in ns.grouped_by:
-                                found = True
-                                ns.space[item_name] = list(group)
-                                break
+        def _no_single_lists(ii: ItemInstance|list[ItemInstance]):
+            if isinstance(ii, ItemInstance):
+                return ii
+            else:
+                return ii[0] if len(ii)==1 else ii
 
-                    if not found:
-                        self.Split([list(g) for g in groups.values()], [k for k in groups])
+        for module in self._steps:
+            if not _satisfies(module): continue
+            instances = _gather_inputs(module)
+            if instances is None: continue
+            for space in instances:
+                signature = self._get_signature(list(space.values()))
+                if signature in self._job_signatures: continue
+                # print(module.name, space)
 
-            namespaces = Namespaces()
-            outer_continue = False
-            for item in module.inputs:
-                item_name = item.key
-                instances: list[ItemInstance] = []
-                for inst in self._item_lookup[item_name]:
-                    jis = self._item_instance_reservations.get(inst, set())
-                    if any(ji.step == module for ji in jis): continue
-                    instances.append(inst)
-
-                if len(instances) == 0: # outer break!
-                    outer_continue=True; break
-
-                have_array = len(instances)>1
-                item_grouped_by = module.Grouped(item)
-                want_array = item_grouped_by is not None
-                    
-                ## join & group by ##
-                if want_array:
-                    groups = self._group_by(item_name, item_grouped_by.key)
-                    if len(groups) == 0:
-                        outer_continue=True; break
-
-                    for k in list(groups):
-                        grp = groups[k]
-                        if any(module in [ji.step for ji in self._item_instance_reservations.get(ii, set())] for ii in grp):
-                            del groups[k]
-
-                    namespaces.MergeGroups(item_name, groups)
-
-                ## split, 1 each ##
-                elif not want_array and have_array:
-                    namespaces.Split([[i] for i in instances])
-
-                ## 1 to 1 ##
-                elif not want_array and not have_array:
-                    namespaces.AddMapping(item_name, instances[0])
-
-            if outer_continue: continue
-            for ns in namespaces.namespaces:
-                job_inst = JobInstance(self._gen_id, module, ns.space)
+                job_inst = JobInstance(self._gen_id, module, dict((k, _no_single_lists(v)) for k, v in space.items()))
+                self._job_signatures[signature] = job_inst
                 self._pending_jobs[job_inst.GetID()] = job_inst
                 self._job_instances[job_inst.GetID()] = job_inst
                 for ii in job_inst.ListInputInstances():
@@ -401,39 +440,44 @@ class WorkflowState(PrivateInit):
 
         self._changed = True
         deleted_job_instances: set[JobInstance] = set()
+        given_item_instances = set(self._given_item_instances)
+        # invalidate parent and downstream
         def _invalidate(ii: ItemInstance):
-            parent = ii.made_by
-            if parent is not None:
-                pk = parent.GetID()
-                deleted_job_instances.add(parent)
-                if pk in self._job_instances: del self._job_instances[pk]
+            def _invalidate_one_item_instance(inst: ItemInstance):
+                if inst.GetID() in given_item_instances: return
+                if inst.item_name in self._item_lookup: del self._item_lookup[inst.item_name]
+                if inst in self._item_instance_reservations: del self._item_instance_reservations[inst]
 
-            givens = set(self._given_item_instances)
-            todo = [ii]
+            parent = ii.made_by
+            if parent is None:
+                _invalidate_one_item_instance(ii)
+                return
+            
+            todo = [parent]
             while len(todo)>0:
                 curr = todo.pop()
-                if curr.item_name in self._item_lookup: del self._item_lookup[curr.item_name]
-                if curr.GetID() in givens: continue
-                if curr not in self._item_instance_reservations: continue
-
-                for ji in self._item_instance_reservations[curr]:
-                    deleted_job_instances.add(ji)
-                    jk = ji.GetID()
-                    if jk not in self._job_instances: continue
-                    del self._job_instances[jk]
-                    if jk in self._pending_jobs: del self._pending_jobs[jk]
-                    outs = ji.ListOutputInstances()
-                    if outs is not None: todo += outs
-
-                del self._item_instance_reservations[curr]
+                deleted_job_instances.add(curr)
+                out = curr.ListOutputInstances()
+                if out is None: continue
+                for ii in out:
+                    todo += [ji for ji in self._item_instance_reservations.get(ii, [])]
+                    _invalidate_one_item_instance(ii)
 
         for item in items:
             for ii in list(self._item_lookup[item.key]):
                 _invalidate(ii)
 
+        # remove deleted jobs
         previous_iis: set[ItemInstance] = set()
-        for p in deleted_job_instances:
-            previous_iis.update(p.ListInputInstances())
+        for ji in deleted_job_instances:
+            previous_iis.update(ji.ListInputInstances())
+            jk = ji.GetID()
+            if jk in self._job_instances: del self._job_instances[jk]
+            if jk in self._pending_jobs: del self._pending_jobs[jk]
+            sig = self._get_signature(list(ji.inputs.values()))
+            if sig in self._job_signatures: del self._job_signatures[sig]
+
+        # remove item instance reservations of deleted jobs
         for ii in previous_iis:
             if ii not in self._item_instance_reservations: continue
             reservations = self._item_instance_reservations[ii]
@@ -447,27 +491,18 @@ class WorkflowState(PrivateInit):
         previous_folder = Path()
         while True:
             i+=1
-            previous_folder = self._workspace.joinpath(f'previous_{i:03}')
+            previous_folder = self._workspace.joinpath(f'previous_run_{i:03}')
             if previous_folder.exists(): continue
             break
         
-        n, ext = self._FILE_NAME.split('.')
-        old_save_renamed = self._workspace.joinpath(f'{n}_{i:03}.{ext}')
         deleted_jobs_folders = [ji.GetFolderName() for ji in deleted_job_instances]
         NL = '\n'
-        os.system(f"""\
+        cmd = f"""\
             mkdir -p {previous_folder}
             {NL.join(f"mv {self._workspace.joinpath(f)} {previous_folder.joinpath(f)}" for f in deleted_jobs_folders)}
-            mv {old_save} 
-        """)
-
-        i = 1
-        while True:
-            old_save_renamed = f'{n}_{i:03}.{ext}'
-            if not self._workspace.joinpath(old_save_renamed).exists():
-                os.rename(old_save, old_save_renamed)
-                break
-            i += 1
+            mv {old_save} {previous_folder}
+        """
+        os.system(cmd)
 
 class Sync:
     def __init__(self) -> None:
@@ -502,6 +537,7 @@ class TerminationWatcher:
 
 class Workflow:
     INPUT_DIR = Path("inputs")
+    OUTPUT_DIR = Path("outputs")
     def __init__(self, compute_modules: list[ComputeModule]|Path|str, reference_folder: Path|str) -> None:
         if isinstance(compute_modules, Path) or isinstance(compute_modules, str):
             compute_modules = ComputeModule.LoadSet(compute_modules)
@@ -537,10 +573,20 @@ class Workflow:
             for i, g in cm._group_by.items():
                 assert any(g in pre.inputs for pre in deps), f"invalid grouping: [{g.key}] is not upstream of [{i.key}] for module [{cm.name}]"
 
+    def _link_output(self, paths: Path|list[Path]):
+        if isinstance(paths, Path): paths = [paths]
+        if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
+        for p in paths: # paths should be relative to ws
+            toks = str(p).split('/')
+            run_inst_dir = toks[0]
+            fname = toks[-1]
+            link = f"{run_inst_dir}--{fname}"
+            os.symlink(f"../{p}", self.OUTPUT_DIR.joinpath(link))
+
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: dict[Item, str|Path|list[str|Path]],
         executor: Executor, params: Params=Params(),
-        regenerate: Iterable[Item]=list(),
+        regenerate: list[Item]=list(),
         _catch_errors: bool = True):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
@@ -594,9 +640,13 @@ class Workflow:
                 print(f'no solution exists')
                 return
             steps: list[ComputeModule] = [s.reference for s in _steps]
+            print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
             self._check_feasible(steps, targets, dep_map)
             state = WorkflowState.ResumeIfPossible('./', steps, inputs)
-            state.Invalidate(regenerate)
+            if len(regenerate)>0:
+                print(f'will regenerate [{", ".join([r.key for r in regenerate])}] and downstream dependents')
+                state.Invalidate(regenerate)
+
             state.Update()
             state.Save()
 
@@ -604,7 +654,6 @@ class Workflow:
                 print(f'nothing to do')
                 return
 
-            print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
             executor.PrepareRun(steps, self.INPUT_DIR, params)
 
             jobs_ran: dict[str, JobInstance] = {}
@@ -620,7 +669,7 @@ class Workflow:
                     if jid in jobs_ran: continue
                     header = f"{_timestamp()} {job.step.name}:{jid}"
                     print(f"{header} started")
-                    _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy()))
+                    _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy(), targets))
                     jobs_ran[jid] = job
 
                 try:
@@ -634,11 +683,18 @@ class Workflow:
                         else:
                             print(f"{header} completed")
                         state.RegisterJobComplete(result.made_by, result.manifest)
+                        if result.manifest is not None:
+                            for t in targets:
+                                if t in result.manifest:
+                                    self._link_output(result.manifest[t])
                 except KeyboardInterrupt:
                     print("force stopped")
                     return
+
                 state.Update()
                 state.Save()
+            
+            executor.PrepareRun
 
         original_dir = os.getcwd()
         def _wrap_and_run():
