@@ -544,7 +544,7 @@ class Workflow:
             compute_modules = ComputeModule.LoadSet(compute_modules)
 
         self._compute_modules = compute_modules
-        self._reference_folder = Path(os.path.abspath(reference_folder))
+        self._reference_folder = Path(os.path.realpath(reference_folder))
         if not self._reference_folder.exists():
             os.makedirs(self._reference_folder)
         else:
@@ -589,14 +589,14 @@ class Workflow:
         executor: Executor, params: Params=Params(),
         regenerate: list[Item]=list(),
         _catch_errors: bool = True):
-        if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
+        if isinstance(workspace, str): workspace = Path(os.path.realpath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
         params.reference_folder = self._reference_folder
 
         # abs. path before change to working dir
-        sys.path = [os.path.abspath(p) for p in sys.path]
-        abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
+        sys.path = [os.path.realpath(p) for p in sys.path]
+        abs_path_if_path = lambda p: Path(os.path.realpath(p)) if isinstance(p, Path) else p
         abs_given = dict((k, [abs_path_if_path(p) for p in v] if isinstance(v, list) else [abs_path_if_path(v)]) for k, v in given.items())
 
         def _timestamp():

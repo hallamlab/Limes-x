@@ -36,9 +36,9 @@ class Job:
 ExecutionHandler = Callable[[Job], tuple[bool, str]]
 SetupHandler = Callable[[list[ComputeModule], Path, Params], None]
 class Executor:
-    def __init__(self, execute_procedure: ExecutionHandler|None=None, prepare_run: SetupHandler|None=None) -> None:
+    def __init__(self, execute_procedure: ExecutionHandler|None=None, prepare_procedure: SetupHandler|None=None) -> None:
         self._execute_procedure: ExecutionHandler = execute_procedure if execute_procedure is not None else lambda j: j.Shell(j.run_command)
-        self._prepare_run = (lambda x, y, z: None) if prepare_run is None else prepare_run
+        self._prepare_run = (lambda x, y, z: None) if prepare_procedure is None else prepare_procedure
 
     def PrepareRun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
         self._prepare_run(modules, inputs_folder, params)
@@ -63,9 +63,9 @@ class Executor:
         job = self._make_job(instance, workspace, params)
 
         from ..environments import local
-        entry_point = Path(os.path.abspath(inspect.getfile(local)))
+        entry_point = Path(os.path.realpath(inspect.getfile(local)))
         job.run_command = f"""\
-            PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
+            PYTHONPATH={':'.join(os.path.realpath(p) for p in sys.path)}
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False}
         """[:-1].replace("  ", "")
         success, msg = self._execute_procedure(job)
@@ -119,7 +119,12 @@ class CloudExecutor(Executor):
     _EXT = 'tgz'
     _SRC_FOLDER_NAME = 'limesx_src'
     _NO_ZIP = ['tgz', 'tar.gz', 'sif']
-    def __init__(self, zipped_inputs: Path|None=None, execute_procedure: ExecutionHandler | None = None, prerun: Callable[[Path], None] | None = None) -> None:
+
+    def __init__(self, cloud_procedure: ExecutionHandler, logistical_procedure: ExecutionHandler|None=None,
+        zipped_inputs: Path|None=None, prerun: Callable[[Path], None] | None = None,
+        tmp_dir_name: str="TMP",
+    ) -> None:
+
         def _prepare_run(modules: list[ComputeModule], inputs_dir: Path, params: Params):
             _shell = lambda cmd: LiveShell(cmd=cmd.replace('  ', ''), echo_cmd=False)
             HERE = os.getcwd()
@@ -165,19 +170,22 @@ class CloudExecutor(Executor):
 
             ## limes_x env ##
             import limes_x
-            src = os.path.abspath(Path(os.path.dirname(inspect.getfile(limes_x))).joinpath('..'))
+            src = os.path.realpath(Path(os.path.dirname(inspect.getfile(limes_x))).joinpath('..'))
             _shell(f"""\
                 cd {src}
                 tar --exclude=__pycache__ -hcf - {limes_x.__name__} | pigz -5 -p {THREADS} >{HERE}/{self._SRC_FOLDER_NAME}.{EXT}
-            """)
+            """)    
             if prerun is not None: prerun(inputs_dir)
-        super().__init__(execute_procedure, _prepare_run)
+        super().__init__(execute_procedure=logistical_procedure, prepare_procedure=_prepare_run)
+        self._cloud_procedure = cloud_procedure
+        self._tmp_dir_name = tmp_dir_name
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params, targets: Iterable[Item]) -> JobResult:
         job = self._make_job(instance, workspace, params, _save=False)
         threads = params.logistic_threads if params.logistic_threads is not None else params.threads
         NL = '\n'
         if instance.step.is_logistical:
+            print(f' - {instance.step.name}:{instance.GetID()} is logistical so running locally')
             res = super().Run(instance, workspace, params, targets)
             out_dir = job.context.output_folder
             BL = {"context.json", "result.json"}
@@ -193,12 +201,12 @@ class CloudExecutor(Executor):
         job.context.Save(workspace)
 
         from ..environments import cloud
-        entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
+        entry_point = Path(os.path.realpath(inspect.getfile(cloud)))
         job.run_command  = f"""\
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False} \
-                {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} SLURM_TMPDIR {":".join(self._NO_ZIP)} \
+                {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} {self._tmp_dir_name} {":".join(self._NO_ZIP)} \
         """.replace("  ", "")
-        success, msg = self._execute_procedure(job)
+        success, msg = self._cloud_procedure(job)
         result = self._compile_result(job, success, msg)
 
         # extract if produced target
@@ -212,3 +220,4 @@ class CloudExecutor(Executor):
                 """.replace("  ", ""), echo_cmd=False)
 
         return result
+
