@@ -160,12 +160,16 @@ class JobResult(AutoPopulate):
     err_log: list[str]
     out_log: list[str]
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if self.manifest is None: self.manifest = {}
+
     def ToDict(self):
         d = {}
         for k, v in self.__dict__.items():
             v: Any = v
             v = { # switch
-                "manifest": lambda: None if v is None else _manifest2dict(v),
+                "manifest": lambda: None if v is None or len(v)==0 else _manifest2dict(v),
             }.get(k, lambda: v)()
             if v is None: continue
             d[k] = v

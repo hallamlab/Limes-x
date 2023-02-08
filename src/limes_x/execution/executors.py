@@ -206,7 +206,17 @@ class CloudExecutor(Executor):
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False} \
                 {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} {self._tmp_dir_name} {":".join(self._NO_ZIP)} \
         """.replace("  ", "")
-        success, msg = self._cloud_procedure(job)
+
+        success, msg = False, ""
+        try:
+            success, msg = self._cloud_procedure(job)
+        except Exception as e:
+            success, msg = False, str(e)
+            print(f"ERROR: in executor: {e}")
+        except KeyboardInterrupt:
+            success, msg = False, "force stopped"
+            print(f"force stopped")
+
         result = self._compile_result(job, success, msg)
 
         # extract if produced target

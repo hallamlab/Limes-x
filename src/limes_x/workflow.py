@@ -711,7 +711,7 @@ class Workflow:
             try:
                 _wrap_and_run()
             except Exception as e:
-                print(f"ERROR: {e}")
+                print(f"ERROR: in workflow {e}")
             finally:
                 os.chdir(original_dir)
  
