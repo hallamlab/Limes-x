@@ -1,3 +1,4 @@
+from re import VERBOSE
 import sys, os
 from pathlib import Path
 import json
@@ -8,13 +9,14 @@ if __name__ == '__main__':
     sys.path = list(set([SRC]+sys.path))
     from _setup import ParseArgs
     e = ParseArgs()
-    MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module
+    MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE, VERBOSE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module, e.verbose
     from limes_x.common.utils import LiveShell
     from limes_x.execution.modules import JobResult
 
     cmd_history = []
     err_log, out_log = [], []
     def _shell(cmd: str):
+        realtime_log = WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath('realtime.log')
         lines = cmd.split('\n')
         code = 0
         for line in lines:
@@ -25,7 +27,11 @@ if __name__ == '__main__':
             cmd_history.append(f"{timestamp} {line}")
             def _on_io(s: str, log: list):
                 if s.endswith('\n'): s = s[:-1]
-                log.append(f'{timestamp} {s}')
+                line = f'{timestamp} {s}'
+                log.append(line)
+                with open(realtime_log, 'a') as f:
+                    f.write(line+'\n')
+                if VERBOSE: print(line)
 
         code = LiveShell(
             CONTEXT.shell_prefix+" "+cmd, echo_cmd=False,
@@ -67,26 +73,28 @@ if __name__ == '__main__':
         else:
             return v
 
-    for k, val in list(result.manifest.items()):
-        if isinstance(val, list):
-            relative = [_rectify_if_path(p) for p in val]
-        else:
-            relative = _rectify_if_path(val)
-        result.manifest[k] = relative
+    if result.manifest is not None:
+        for k, val in list(result.manifest.items()):
+            if isinstance(val, list):
+                relative = [_rectify_if_path(p) for p in val]
+            else:
+                relative = _rectify_if_path(val)
+            result.manifest[k] = relative
 
-    err_msg = None
-    try:
-        for ps in result.manifest.values():
-            _break = False
-            for p in ps if isinstance(ps, list) else [ps]:
-                if isinstance(p, str): continue
-                if os.path.exists(p): continue
-                result.error_message = f'promised output at [{p}] missing'
-                _break = True
-                break
-            if _break: break
-    except Exception as e:
-        err_msg = f'result manifest corrupted'
+        try:
+            for ps in result.manifest.values():
+                _break = False
+                for p in ps if isinstance(ps, list) else [ps]:
+                    if isinstance(p, str): continue
+                    if os.path.exists(p): continue
+                    result.error_message = f'promised output at [{p}] missing'
+                    _break = True
+                    break
+                if _break: break
+        except Exception as e:
+            result.error_message = f'result manifest corrupted'
+    else:
+        result.error_message = f'no manifest'
 
     result_path = RELATIVE_OUTPUT_PATH.joinpath('result.json')
     with open(result_path, 'w') as j:

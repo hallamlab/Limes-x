@@ -66,7 +66,7 @@ class Executor:
         entry_point = Path(os.path.abspath(inspect.getfile(local)))
         job.run_command = f"""\
             PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder}
+            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False}
         """[:-1].replace("  ", "")
         success, msg = self._execute_procedure(job)
 
@@ -195,7 +195,7 @@ class CloudExecutor(Executor):
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
         job.run_command  = f"""\
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} \
+            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False} \
                 {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} SLURM_TMPDIR {":".join(self._NO_ZIP)} \
         """.replace("  ", "")
         success, msg = self._execute_procedure(job)

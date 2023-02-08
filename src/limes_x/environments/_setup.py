@@ -1,3 +1,4 @@
+from re import VERBOSE
 import sys, os
 from pathlib import Path
 from dataclasses import dataclass
@@ -5,6 +6,7 @@ from dataclasses import dataclass
 def ParseArgs(python_path: list[str]|None=None):
     if python_path is not None:
         sys.path = python_path
+    VERBOSE = bool(sys.argv.pop())
     _paths: list = list(sys.argv[1:])
     assert len(_paths) == 3, f"bad receive {_paths}"
     MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH = [Path(p) for p in _paths[:3]]
@@ -25,11 +27,13 @@ def ParseArgs(python_path: list[str]|None=None):
         workspace: Path
         relative_output_path: Path
         context: JobContext
+        verbose: bool
         
     return ExecutionEssentials(
         module_path=MODULE_PATH,
         module=THIS_MODULE,
         workspace=WORKSPACE,
         relative_output_path=RELATIVE_OUTPUT_PATH,
-        context=CONTEXT
+        context=CONTEXT,
+        verbose=VERBOSE,
     )

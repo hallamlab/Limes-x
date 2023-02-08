@@ -34,6 +34,7 @@ class WorkflowState(PrivateInit):
         self._item_instance_reservations: dict[ItemInstance, set[JobInstance]] = {}
 
         self._steps = steps
+        self._finihsed_steps: set[str] = set()
         self._completed_modules: list[str] = []
         self._input_to_steps = self._make_input_to_steps_mapping(steps)
         self._group_by_paths: dict[tuple[str, str], list[str]] = {}

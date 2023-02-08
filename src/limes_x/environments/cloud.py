@@ -2,8 +2,11 @@ import json
 import sys, os
 from pathlib import Path
 import uuid
+from datetime import datetime as dt
 
 if __name__ == '__main__':
+    NEWLINE = '\n'
+
     NO_ZIP = sys.argv.pop().split(":")
     TMP_NAME = sys.argv.pop()
     TMP = Path(os.environ.get(TMP_NAME, '/tmp'))
@@ -22,7 +25,7 @@ if __name__ == '__main__':
     sys.path = list(set([str(CLOUD_LIB)]+sys.path))
     from _setup import ParseArgs
     e = ParseArgs(sys.path)
-    MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module
+    MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH, CONTEXT, THIS_MODULE, VERBOSE = e.module_path, e.workspace, e.relative_output_path, e.context, e.module, e.verbose
     os.makedirs(RELATIVE_OUTPUT_PATH)
 
     unzipped = set()
@@ -44,17 +47,21 @@ if __name__ == '__main__':
 
     cmd_history = []
     err_log, out_log = [], []
-    def _shell(cmd: str):
+    def _shell(cmd: str, is_child=True):
+        realtime_log = WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath('realtime.log')
         cmd = cmd.replace("  ", "")
         lines = cmd.split('\n')
         for line in lines:
             line = line.strip()
             if line == "": continue
             cmd_history.append(line)
+            timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
             def _on_io(s: str, log: list):
                 if s.endswith('\n'): s = s[:-1]
-                log.append(s)
-
+                line = f'{timestamp} {s}'
+                if not is_child: log.append(line)
+                with open(realtime_log, 'a') as f:
+                    f.write(line+NEWLINE) if not is_child else f.write(s+'\n')
         LiveShell(
             cmd, echo_cmd=False,
             onOut=lambda s: _on_io(s, out_log),
@@ -62,7 +69,6 @@ if __name__ == '__main__':
         )
 
     # print(sys.argv, limes_x.__name__)
-    newline = '\n'
     lib_name = env.__name__
     module_name = str(MODULE_PATH).split('/')[-1]
     _shell(f"""\
@@ -83,36 +89,47 @@ if __name__ == '__main__':
     _shell(f"""\
         echo $(date) "setting up requirements"
         cd {CLOUD_REF}
-        {newline.join(f"tar -hxf {req}.tgz" for req in zreqs)}
-        {newline.join(f"cp {req} ./" for req in cpreqs)}
+        {NEWLINE.join(f"tar -hxf {req}.tgz" for req in zreqs)}
+        {NEWLINE.join(f"cp {req} ./" for req in cpreqs)}
         ls -lh
     """)
     CONTEXT.params.reference_folder = CLOUD_REF
     CONTEXT.lib = CLOUD_LIB
     CONTEXT.Save(CLOUD_WS)
 
+    _shell("echo $(date) running...")
     _shell(f"""\
-        echo $(date) "starting"
-        python {env.__file__} {CLOUD_LIB}/{module_name} {CLOUD_WS} {RELATIVE_OUTPUT_PATH} \
-    """.replace("  ", ""))
+        python {env.__file__} {CLOUD_LIB}/{module_name} {CLOUD_WS} {RELATIVE_OUTPUT_PATH} {True}\
+    """, is_child=True)
     BL = {
         'context.json',
-        'result.json'
+        'result.json',
+        'realtime.log'
     }
     outs = [f for f in os.listdir(RELATIVE_OUTPUT_PATH) if f not in BL]
     _shell(f"""\
         echo $(date) "gathering results"
         cd {RELATIVE_OUTPUT_PATH}
-        {newline.join(f"tar -cf - {f} | pigz -5 -p {CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/{f}.tgz" for f in outs)}
+        {NEWLINE.join(f"tar -cf - {f} | pigz -5 -p {CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/{f}.tgz" for f in outs)}
         echo $(date) "done"
         du -sh *
-    """.replace("  ", ""))
+    """)
 
     result_json = 'result.json'
-    with open(RELATIVE_OUTPUT_PATH.joinpath(result_json)) as j:
-        res = json.load(j)
-        res['cloud-wrapper_commands'] = cmd_history
-        res['cloud-wrapper_out'] = out_log
-        res['cloud-wrapper_err'] = err_log
-        with open(WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath(result_json), 'w') as outj:
-            json.dump(res, outj, indent=4)
+    result_path = RELATIVE_OUTPUT_PATH.joinpath(result_json)
+    def _get_result_json():
+        if result_path.exists():
+            with open(result_path) as j:
+                try:
+                    return json.load(j)
+                except json.JSONDecodeError:
+                    return {}
+        else:
+            return {}
+
+    res = _get_result_json()
+    res['cloud-wrapper_commands'] = cmd_history
+    res['cloud-wrapper_out'] = out_log
+    res['cloud-wrapper_err'] = err_log
+    with open(WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath(result_json), 'w') as outj:
+        json.dump(res, outj, indent=4)

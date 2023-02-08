@@ -165,7 +165,7 @@ class JobResult(AutoPopulate):
         for k, v in self.__dict__.items():
             v: Any = v
             v = { # switch
-                "manifest": lambda: _manifest2dict(v),
+                "manifest": lambda: None if v is None else _manifest2dict(v),
             }.get(k, lambda: v)()
             if v is None: continue
             d[k] = v
@@ -178,7 +178,7 @@ class JobResult(AutoPopulate):
             v: Any = d[k]
             v = { # switch
                 "exit_code": lambda: int(v),
-                "manifest": lambda: _dict2manifest(v),
+                "manifest": lambda: {} if v is None else _dict2manifest(v),
             }.get(k, lambda: v)()
             kwargs[k] = v
         return JobResult(**kwargs)
