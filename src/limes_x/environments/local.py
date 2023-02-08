@@ -68,8 +68,12 @@ if __name__ == '__main__':
     result.err_log = err_log
 
     def _rectify_if_path(v):
-        if isinstance(v, Path):
-            return Path(os.path.abspath(v)).relative_to(WORKSPACE)
+        if isinstance(v, Path) and os.path.isabs(v):
+            if v.is_relative_to(WORKSPACE):
+                return Path(os.path.abspath(v)).relative_to(WORKSPACE)
+            else:
+                _shell(f'echo " ! warning: output path isn\'t relative: {v}"')
+                return v
         else:
             return v
 
