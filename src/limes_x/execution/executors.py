@@ -63,9 +63,9 @@ class Executor:
         job = self._make_job(instance, workspace, params)
 
         from ..environments import local
-        entry_point = Path(os.path.realpath(inspect.getfile(local)))
+        entry_point = Path(os.path.abspath(inspect.getfile(local)))
         job.run_command = f"""\
-            PYTHONPATH={':'.join(os.path.realpath(p) for p in sys.path)}
+            PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False}
         """[:-1].replace("  ", "")
         success, msg = self._execute_procedure(job)
@@ -170,7 +170,7 @@ class CloudExecutor(Executor):
 
             ## limes_x env ##
             import limes_x
-            src = os.path.realpath(Path(os.path.dirname(inspect.getfile(limes_x))).joinpath('..'))
+            src = os.path.abspath(Path(os.path.dirname(inspect.getfile(limes_x))).joinpath('..'))
             _shell(f"""\
                 cd {src}
                 tar --exclude=__pycache__ -hcf - {limes_x.__name__} | pigz -5 -p {THREADS} >{HERE}/{self._SRC_FOLDER_NAME}.{EXT}
@@ -201,7 +201,7 @@ class CloudExecutor(Executor):
         job.context.Save(workspace)
 
         from ..environments import cloud
-        entry_point = Path(os.path.realpath(inspect.getfile(cloud)))
+        entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
         job.run_command  = f"""\
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False} \
                 {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} {self._tmp_dir_name} {":".join(self._NO_ZIP)} \

@@ -251,7 +251,7 @@ class ComputeModule(PrivateInit):
 
     @classmethod
     def _load(cls, folder_path: str|Path):
-        folder_path = Path(os.path.realpath(folder_path))
+        folder_path = Path(os.path.abspath(folder_path))
         name = str(folder_path).split('/')[-2] # the folder name
 
         err_msg = f"module [{name}] at [{folder_path}] appears to be corrupted"
@@ -342,7 +342,7 @@ class ModuleBuilder(AutoPopulate):
             assert len(toks)>=3 and toks[-3] != "", f"can't infer name from {def_path}"
             name = toks[-3]
         self._name = name
-        self._location = Path(os.path.realpath(def_path.joinpath('../..')))
+        self._location = Path(os.path.abspath(def_path.joinpath('../..')))
         return self
 
     def IsLogistical(self):
@@ -404,7 +404,7 @@ class ModuleBuilder(AutoPopulate):
             _make_folders()
 
         try:
-            HERE = Path('/'.join(os.path.realpath(__file__).split('/')[:-1]))
+            HERE = Path('/'.join(os.path.abspath(__file__).split('/')[:-1]))
         except NameError:
             HERE = Path(os.getcwd())
         

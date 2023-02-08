@@ -5,7 +5,7 @@ import json
 from datetime import datetime as dt
 
 if __name__ == '__main__':
-    SRC = os.path.realpath(Path(__file__).joinpath('../../..'))
+    SRC = os.path.abspath(Path(__file__).joinpath('../../..'))
     sys.path = list(set([SRC]+sys.path))
     from _setup import ParseArgs
     e = ParseArgs()
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
     def _rectify_if_path(v):
         if isinstance(v, Path):
-            return Path(os.path.realpath(v)).relative_to(WORKSPACE)
+            return Path(os.path.abspath(v)).relative_to(WORKSPACE)
         else:
             return v
 

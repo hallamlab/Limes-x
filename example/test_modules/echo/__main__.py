@@ -12,7 +12,7 @@ if __name__ == '__main__':
     assert len(_paths) == 3
     WORKSPACE, relative_output_path = [Path(p) for p in _paths[1:3]]
     ENV = JobEnv.FromWorkspace(WORKSPACE.joinpath(relative_output_path))
-    MODULE_PATH = '/'.join(os.path.realpath(__file__).split('/')[:-1])
+    MODULE_PATH = '/'.join(os.path.abspath(__file__).split('/')[:-1])
     THIS_MODULE = ComputeModule._load(MODULE_PATH)
 
     context = ENV.context
