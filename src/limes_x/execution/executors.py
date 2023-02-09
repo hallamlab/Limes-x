@@ -14,10 +14,12 @@ class Job:
     context: JobContext
     run_command: str
     workspace: Path
+    _verbose: bool
 
     def __init__(self, instance: JobInstance, workspace: Path, params: Params, _save=True) -> None:
         self.instance = instance
         self.workspace = workspace
+        self._verbose = True
 
         c = JobContext()
         c.job_id = self.instance.GetID()
@@ -30,7 +32,7 @@ class Job:
 
     def Shell(self, cmd: str):
         err_log = []
-        code=LiveShell(cmd, echo_cmd=False, onErr=lambda s: err_log.append(s))
+        code=LiveShell(cmd, echo_cmd=False, onErr=lambda s: err_log.append(s), onOut=print if self._verbose else lambda s: None)
         return code==0, "".join(err_log)
 
 ExecutionHandler = Callable[[Job], tuple[bool, str]]
@@ -202,10 +204,11 @@ class CloudExecutor(Executor):
 
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
-        job.run_command  = f"""\
+        job.run_command = f"""\
             python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False} \
                 {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} {self._tmp_dir_name} {":".join(self._NO_ZIP)} \
         """.replace("  ", "")
+        job._verbose = False # since cloud
 
         success, msg = False, ""
         try:
