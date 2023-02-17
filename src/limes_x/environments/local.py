@@ -22,10 +22,11 @@ if __name__ == '__main__':
         for line in lines:
             line = line.strip()
             if line == "": continue
-            # timestamp = f"{dt.now().strftime('%d%b%Y-%H:%M:%S')}>"
-            timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
-            cmd_history.append(f"{timestamp} {line}")
+            start_time = f"{dt.now().strftime('%d%b%Y-%H:%M:%S')}>"
+            cmd_history.append(f"{line}")
+            cmd_history.append(f"--- {start_time} ---")
             def _on_io(s: str, log: list):
+                timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
                 if s.endswith('\n'): s = s[:-1]
                 line = f'{timestamp} {s}'
                 log.append(line)

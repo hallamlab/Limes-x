@@ -113,7 +113,9 @@ class JobContext(AutoPopulate):
 
     def Save(self, workspace: Path):
         folder = workspace.joinpath(self.output_folder)
-        if not folder.exists(): os.makedirs(folder)
+        if folder.exists():
+            shutil.rmtree(folder)
+        os.makedirs(folder)
         with open(folder.joinpath(JobContext.__FILE_NAME), 'w') as j:
             d = {}
             for k, v in self.__dict__.items():

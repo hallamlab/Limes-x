@@ -656,6 +656,7 @@ class Workflow:
                 return
 
             executor.PrepareRun(steps, self.INPUT_DIR, params)
+            print(f">>> start")
 
             jobs_ran: dict[str, JobInstance] = {}
             while not watcher.kill_now:

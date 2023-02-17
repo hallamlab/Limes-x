@@ -162,13 +162,16 @@ class CloudExecutor(Executor):
             to_link = [zipped[f] for f in os.listdir('inputs') if f in zipped]
 
             if zipped_inputs is not None:
+                print(f"linking {len(to_link)} previously zipped inputs")
                 for f in to_link:
                     os.symlink(zipped_inputs.joinpath(f), f'inputs/{f}')
 
-            _shell(f"""\
-                cd inputs
-                {NEWL.join(f"tar -hcf - {f} | pigz -5 -p {THREADS} >{f}.{EXT}" for f in to_zip)}
-            """)
+            for i, f in enumerate(to_zip):
+                print(f"zipping {i+1} of {len(to_zip)} inputs: {f}")
+                _shell(f"""\
+                    cd inputs
+                    tar -hcf - "{f}" | pigz -5 -p {THREADS} >"{f}.{EXT}"
+                """)
 
             ## limes_x env ##
             import limes_x
