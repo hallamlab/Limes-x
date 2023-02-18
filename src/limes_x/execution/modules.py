@@ -192,6 +192,10 @@ class JobResult(AutoPopulate):
 class ModuleExistsError(FileExistsError):
     pass
 
+def LoadComputeModules(folder: Path|str):
+    folder = Path(folder)
+    return ComputeModule.LoadSet(folder)
+
 class ComputeModule(PrivateInit):
     DEFINITION_FILE_NAME = 'definition.py'
     LIB_FOLDER = 'lib'
@@ -243,7 +247,7 @@ class ComputeModule(PrivateInit):
     @classmethod
     def LoadSet(cls, modules_path: str|Path):
         modules_path = Path(modules_path)
-        compute_modules = []
+        compute_modules: list[ComputeModule] = []
         for dir in os.listdir(modules_path):
             mpath = modules_path.joinpath(dir)
             if not os.path.isdir(mpath): continue
