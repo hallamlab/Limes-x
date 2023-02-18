@@ -198,10 +198,11 @@ class CloudExecutor(Executor):
             for f in os.listdir(out_dir):
                 if f in BL: continue
                 to_zip.append(f)
-            LiveShell(f"""\
-                cd {job.context.output_folder}
-                {NL.join(f"tar -hcf - {o} | pigz -5 -p {threads} >{o}.{self._EXT}" for o in to_zip)}
-            """.replace("  ", ""), echo_cmd=False)
+            for o in to_zip:
+                LiveShell(f"""\
+                    cd {job.context.output_folder}
+                    tar -hcf - {o} | pigz -5 -p {threads} >{o}.{self._EXT}
+                """.replace("  ", ""), echo_cmd=False)
             return res
         job.context.Save(workspace)
 
@@ -230,10 +231,11 @@ class CloudExecutor(Executor):
             for k, v in result.manifest.items():
                 if k not in targets: continue
                 if isinstance(v, Path): v = [v]
-                LiveShell(f"""\
-                    cd {job.context.output_folder}
-                    {NL.join(f"tar -hxf {path.relative_to(job.context.output_folder)}.{self._EXT}" for path in v)}
-                """.replace("  ", ""), echo_cmd=False)
+                for path in v:
+                    LiveShell(f"""\
+                        cd {job.context.output_folder}
+                        tar -hxf {path.relative_to(job.context.output_folder)}.{self._EXT}
+                    """.replace("  ", ""), echo_cmd=False)
 
         return result
 
