@@ -674,6 +674,7 @@ class Workflow:
                     _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy(), targets))
                     jobs_ran[jid] = job
 
+                sys.stdout.flush()
                 try:
                     for result in sync.WaitAll():
                         if result is None:
@@ -695,6 +696,7 @@ class Workflow:
 
                 state.Update()
                 state.Save()
+                sys.stdout.flush()
             
             executor.PrepareRun
 
