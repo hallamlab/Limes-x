@@ -33,7 +33,8 @@ class Job:
 
     def Shell(self, cmd: str):
         err_log = []
-        code=LiveShell(cmd, echo_cmd=False, onErr=lambda s: err_log.append(s), onOut=print if self._verbose else lambda s: None)
+        pr = lambda s: print(s, end="")
+        code=LiveShell(cmd, echo_cmd=False, onErr=lambda s: err_log.append(s), onOut=pr if self._verbose else lambda s: None)
         return code==0, "".join(err_log)
 
 ExecutionHandler = Callable[[Job], tuple[bool, str]]
@@ -58,8 +59,9 @@ class Executor:
             instance = instance,
             workspace = workspace,
             params = params,
-            _save = _save,
+            _save = False,
         ))
+        job.context.Save(workspace=workspace)
         return job
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params, targets: Iterable[Item]) -> JobResult:
@@ -98,6 +100,9 @@ class Executor:
                     if r.manifest is None:
                         r.error_message = f"no output created{'' if r.error_message is None else f', err: {r.error_message}'}"
                         r.manifest = {}
+                    else:
+                        realtime_log = context.output_folder.joinpath("realtime.log")
+                        if os.path.exists(realtime_log): os.remove(realtime_log)
                     return r
             except Exception as e:
                 err_msg = f'result manifest corrupted'

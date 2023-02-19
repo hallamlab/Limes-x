@@ -7,11 +7,12 @@ import uuid
 from threading import Thread, Condition
 import signal
 from datetime import datetime as dt
+import psutil
 
 from .execution.solver import DependencySolver
 from .common.utils import PrivateInit
 # from .compute_module import Item, ComputeModule, Params, JobContext, JobResult
-from .execution.instances import JobInstance, OperationInstance, ItemInstance
+from .execution.instances import JobInstance, ItemInstance
 from .execution.modules import ComputeModule, Item, JobContext, JobResult, Params
 from .execution.executors import Executor
 
@@ -22,37 +23,36 @@ class JobError(Exception):
 
 class WorkflowState(PrivateInit):
     _FILE_NAME = 'workflow_state.json'
-    def __init__(self, workspace: Path, steps: list[ComputeModule], **kwargs) -> None:
+    def __init__(self, workspace: Path, steps: list[ComputeModule], dependency_map: dict[str, set[str]]=dict(), **kwargs) -> None:
         super().__init__(_key=kwargs.get('_key'))
         self._ids: set[str] = set()
-        self._job_instances: dict[str, OperationInstance] = {}
-        self._job_signatures: dict[str, OperationInstance] = {} # key is "hash" of inputs
+        self._job_instances: dict[str, JobInstance] = {}
+        self._job_signatures: dict[str, JobInstance] = {} # key is "hash" of inputs
         self._item_lookup: dict[str, list[ItemInstance]] = {}
         self._given_item_instances: list[str] = []
 
         self._pending_jobs: dict[str, JobInstance] = {}
-        self._item_instance_reservations: dict[ItemInstance, set[OperationInstance]] = {}
+        self._item_instance_reservations: dict[ItemInstance, set[JobInstance]] = {}
 
         self._steps = steps
         self._finihsed_steps: set[str] = set()
         self._completed_modules: list[str] = []
-        self._input_to_steps = self._make_input_to_steps_mapping(steps)
+        self._dependency_map: dict[str, set[str]] = dependency_map # item name to list[op_names]
+        for s in steps:
+            for i in s.inputs:
+                self._add_dependency_mapping(i.key, s.name)
+            for o in s.GetUnmaskedOutputs():
+                self._add_dependency_mapping(s.name, o.key)
+
         self._group_by_paths: dict[tuple[str, str], list[str]] = {}
         for s in steps:
             for target, start in s._group_by.items():
-                group_by_path = self._find_group_by_path(start.key, target.key)
+                group_by_path = self._find_groupby_path(start.key, target.key)
                 assert group_by_path is not None, f"[{target.key}] group by [{start.key}] for [{s.name}] is invalid for this set of compute modules. No path between"
                 self._group_by_paths[(target.key, start.key)] = group_by_path
 
         self._changed = False
         self._workspace:Path = workspace
-
-    def _make_input_to_steps_mapping(self, steps: list[ComputeModule]):
-        mapping: dict[str, list[ComputeModule]] = {}
-        for s in steps:
-            for i in s.inputs:
-                mapping[i.key] = mapping.get(i.key, []) + [s]
-        return mapping
 
     def _register_item_inst(self, ii: ItemInstance):
         ilst = self._item_lookup.get(ii.item_name, [])
@@ -63,7 +63,7 @@ class WorkflowState(PrivateInit):
         if not self._changed: return
         jobs_by_step = {}
         for ji in self._job_instances.values():
-            k = ji.step_name
+            k = ji.step.name
             d = jobs_by_step.get(k, {})
             d[ji.GetID()] = ji.ToDict()
             jobs_by_step[k] = d
@@ -89,6 +89,7 @@ class WorkflowState(PrivateInit):
         
         state = {
             "modules": modules,
+            "dependency_map": dict((k, list(v)) for k, v in self._dependency_map.items()),
             "module_executions": jobs_by_step,
             "completed_modules": self._completed_modules,
             "item_instances": item_instances,
@@ -118,7 +119,7 @@ class WorkflowState(PrivateInit):
                 assert cm.outputs == outs
                 cm.output_mask = {Item(i) for i in md.get("unused_out", [])}
 
-            job_instances: dict[str, OperationInstance] = {}
+            job_instances: dict[str, JobInstance] = {}
             item_instances: dict[str, ItemInstance] = {}
 
             given = set(serialized_state["given"])
@@ -138,7 +139,7 @@ class WorkflowState(PrivateInit):
                 
                 while len(todo_jobs)>0:
                     module_name, id, obj = todo_jobs[0]
-                    ji = OperationInstance.FromDict(cm_ref[module_name], id, obj, item_instances)
+                    ji = JobInstance.FromDict(module_name, id, obj, item_instances)
                     if ji is None: break
                     found = True
                     todo_jobs.pop(0)
@@ -156,7 +157,9 @@ class WorkflowState(PrivateInit):
                 outs = dict((ik, item_instances[v] if isinstance(v, str) else [item_instances[iik] for iik in v]) for ik, v in outs.items())
                 job_instances[jid].MarkAsComplete(outs)
 
-            state = WorkflowState(workspace, steps, _key=cls._initializer_key)
+            state = WorkflowState(workspace, steps,
+                dependency_map=dict((k, set(v)) for k, v in serialized_state["dependency_map"].items()),
+                _key=cls._initializer_key)
             state._completed_modules = serialized_state["completed_modules"]
             state._given_item_instances = list(given)
             state._ids.update(item_instances)
@@ -181,11 +184,17 @@ class WorkflowState(PrivateInit):
     def MakeNew(cls, workspace: str|Path, steps: list[ComputeModule], given: list[InputGroup]):
         workspace = Path(workspace)
         assert len({m.name for m in steps})==len(steps), f"duplicate compute module name"
-        state = WorkflowState(workspace, steps, _key=cls._initializer_key)
+        dep_map = {}
+        for grp in given:
+            k = grp.root_type.key
+            for ch in grp.children:
+                to = dep_map.get(k, set())
+                to.add(ch.key)
+                dep_map[k] = to
+
+        state = WorkflowState(workspace, steps, dependency_map=dep_map, _key=cls._initializer_key)
         for grp in given:
             root_instance = ItemInstance(state._gen_id, grp.root_type, grp.root_value)
-            group_operation = OperationInstance(state._gen_id, "group input", {grp.root_type.key: root_instance})
-            state._register_op_instance(group_operation)
             children: dict[str, ItemInstance|list[ItemInstance]] = {}
             for ii in [ItemInstance(state._gen_id, i, p) for i, ps in grp.children.items() for p in ps] + [root_instance]:
                 state._register_item_inst(ii)
@@ -193,7 +202,6 @@ class WorkflowState(PrivateInit):
                 v = children.get(ii.item_name, [])
                 if not isinstance(v, list): v = [v]
                 children[ii.item_name] =  v + [ii]
-            group_operation.MarkAsComplete(children)
 
         produced: dict[Item, ComputeModule] = {}
         for step in steps:
@@ -235,22 +243,31 @@ class WorkflowState(PrivateInit):
     def GetPendingJobs(self):
         return list(self._pending_jobs.values())        
 
-    def _find_group_by_path(self, start: str, target: str):
+    def _add_dependency_mapping(self, start: str, end: str):
+        mapped = self._dependency_map.get(start, set())
+        mapped.add(end)
+        self._dependency_map[start] = mapped
+
+    def _find_groupby_path(self, start: str, target: str):
         class Todo:
             def __init__(self, node: str, path: list[str]) -> None:
                 self.node = node
                 self.path = path
 
+        seen = set()
         todo: list[Todo] = [Todo(start, [])]
         candidate = []
         while len(todo)>0:
             t = todo.pop()
             curr, path = t.node, t.path
+            seen.add(curr)
             if curr == target and len(path)+1 > len(candidate):
                 candidate = path+[curr] # found one, but want longest
 
-            for job in self._input_to_steps.get(curr, []):
-                todo += [Todo(o.key, path+[curr, job.name]) for o in job.GetUnmaskedOutputs()]
+            for nnode in self._dependency_map.get(curr, set()):
+                if nnode in seen: continue
+                todo.append(Todo(nnode, path+[curr]))
+
         return None if len(candidate) == 0 else candidate
 
     def _group_by(self, target: str, by: str):
@@ -267,7 +284,7 @@ class WorkflowState(PrivateInit):
 
         def _get_group(start: ItemInstance):
             class Todo:
-                def __init__(self, node: ItemInstance|JobInstance|OperationInstance, depth: int) -> None:
+                def __init__(self, node: ItemInstance|JobInstance, depth: int) -> None:
                     self.node = node
                     self.depth = depth
 
@@ -282,7 +299,11 @@ class WorkflowState(PrivateInit):
 
                 next_name = path[depth+1]
                 if isinstance(instance, ItemInstance):
-                    res = [j for j in self._item_instance_reservations.get(instance, []) if j.step_name == next_name]
+                    if next_name in self._item_lookup:
+                        for i in self._item_lookup[next_name]:
+                            todo.append(Todo(i, depth+1))
+                        continue # item linked via logistical action, not by compute job
+                    res = [j for j in self._item_instance_reservations.get(instance, []) if j.step.name == next_name]
                     if len(res) == 0: return [] # item is intermediate and not used, so chain broken
                     for j in res:
                         todo.append(Todo(j, depth+1))
@@ -422,17 +443,14 @@ class WorkflowState(PrivateInit):
                 self._register_job_instance(job_inst)
             self._changed = True
 
-    def _register_op_instance(self, inst: OperationInstance):
+    def _register_job_instance(self, inst: JobInstance):
         self._job_signatures[self._get_signature(inst.inputs.values())] = inst
+        self._pending_jobs[inst.GetID()] = inst
         self._job_instances[inst.GetID()] = inst
         for ii in inst.ListInputInstances():
             lst = self._item_instance_reservations.get(ii, set())
             lst.add(inst)
             self._item_instance_reservations[ii] = lst
-
-    def _register_job_instance(self, inst: JobInstance):
-        self._pending_jobs[inst.GetID()] = inst
-        self._register_op_instance(inst)
 
     def RegisterJobComplete(self, job_id: str, created: dict[Item, Any]):
         if job_id not in self._pending_jobs: return
@@ -556,6 +574,11 @@ class TerminationWatcher:
     self.kill_now = True
     self.sync.PushNotify()
 
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
+    for child in children:
+        child.kill()
+
 class InputGroup:
     def __init__(self, by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
         abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
@@ -629,11 +652,13 @@ class Workflow:
         if isinstance(paths, Path): paths = [paths]
         if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
         for p in paths: # paths should be relative to ws
+            if not p.exists(): continue
+            original = Path(f"../{p}")
             toks = str(p).split('/')
             run_inst_dir = toks[0]
             fname = toks[-1]
             link = f"{run_inst_dir}--{fname}"
-            os.symlink(f"../{p}", self.OUTPUT_DIR.joinpath(link))
+            os.symlink(original, self.OUTPUT_DIR.joinpath(link))
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: list[InputGroup],
@@ -653,7 +678,7 @@ class Workflow:
 
         sync = Sync()
         watcher = TerminationWatcher(sync)
-        def _run_job_async(jobi: OperationInstance, procedure: Callable[[], JobResult]):
+        def _run_job_async(jobi: JobInstance, procedure: Callable[[], JobResult]):
             def _job():
                 try:
                     result = procedure()
@@ -665,7 +690,7 @@ class Workflow:
                     )
                 sync.PushNotify(result)
         
-            th = Thread(target=_job)
+            th = Thread(target=_job, daemon=True)
             th.start()
 
         def _run():
@@ -729,7 +754,6 @@ class Workflow:
                                     self._link_output(result.manifest[t])
                 except KeyboardInterrupt:
                     print("force stopped")
-                    return
 
                 state.Update()
                 state.Save()
