@@ -36,6 +36,9 @@ if __name__ == '__main__':
             toks = str(p).split('/')
             folder = toks[0]
             output = '/'.join(toks[:2])
+            os.system(f'echo "{p}" >> {WORKSPACE}/x')
+            os.system(f'echo "{toks}" >> {WORKSPACE}/x')
+            os.system(f'echo "{folder}" >> {WORKSPACE}/x')
             if not os.path.exists(folder): os.makedirs(folder)
             if output in unzipped: continue
             os.system(f"cd {folder} && tar -hxf {WORKSPACE.joinpath(f'{output}.tgz')}")
