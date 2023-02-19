@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Callable, Iterable
 import inspect
+
 from .modules import ComputeModule, JobContext, JobResult, Params, Item
 from .instances import JobInstance
 from ..common.utils import LiveShell
@@ -130,9 +131,8 @@ class CloudExecutor(Executor):
         def _prepare_run(modules: list[ComputeModule], inputs_dir: Path, params: Params):
             _shell = lambda cmd: LiveShell(cmd=cmd.replace('  ', ''), echo_cmd=False)
             HERE = os.getcwd()
-            NEWL = '\n'
             EXT = self._EXT
-            THREADS = params.logistic_threads if params.logistic_threads is not None else params.threads
+            THREADS = params.threads
 
             ## requirements ##
             if os.path.exists(params.reference_folder):
@@ -186,25 +186,7 @@ class CloudExecutor(Executor):
         self._tmp_dir_name = tmp_dir_name
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params, targets: Iterable[Item]) -> JobResult:
-        job = self._make_job(instance, workspace, params, _save=False)
-        threads = params.logistic_threads if params.logistic_threads is not None else params.threads
-        NL = '\n'
-        if instance.step.is_logistical:
-            print(f' - {instance.step.name}:{instance.GetID()} is logistical so running locally')
-            res = super().Run(instance, workspace, params, targets)
-            out_dir = job.context.output_folder
-            BL = {"context.json", "result.json"}
-            to_zip = []
-            for f in os.listdir(out_dir):
-                if f in BL: continue
-                to_zip.append(f)
-            for o in to_zip:
-                LiveShell(f"""\
-                    cd {job.context.output_folder}
-                    tar -hcf - {o} | pigz -5 -p {threads} >{o}.{self._EXT}
-                """.replace("  ", ""), echo_cmd=False)
-            return res
-        job.context.Save(workspace)
+        job = self._make_job(instance, workspace, params)
 
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))

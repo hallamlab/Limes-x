@@ -11,7 +11,7 @@ from datetime import datetime as dt
 from .execution.solver import DependencySolver
 from .common.utils import PrivateInit
 # from .compute_module import Item, ComputeModule, Params, JobContext, JobResult
-from .execution.instances import JobInstance, ItemInstance
+from .execution.instances import JobInstance, OperationInstance, ItemInstance
 from .execution.modules import ComputeModule, Item, JobContext, JobResult, Params
 from .execution.executors import Executor
 
@@ -25,13 +25,13 @@ class WorkflowState(PrivateInit):
     def __init__(self, workspace: Path, steps: list[ComputeModule], **kwargs) -> None:
         super().__init__(_key=kwargs.get('_key'))
         self._ids: set[str] = set()
-        self._job_instances: dict[str, JobInstance] = {}
-        self._job_signatures: dict[str, JobInstance] = {} # key is "hash" of inputs
+        self._job_instances: dict[str, OperationInstance] = {}
+        self._job_signatures: dict[str, OperationInstance] = {} # key is "hash" of inputs
         self._item_lookup: dict[str, list[ItemInstance]] = {}
         self._given_item_instances: list[str] = []
 
         self._pending_jobs: dict[str, JobInstance] = {}
-        self._item_instance_reservations: dict[ItemInstance, set[JobInstance]] = {}
+        self._item_instance_reservations: dict[ItemInstance, set[OperationInstance]] = {}
 
         self._steps = steps
         self._finihsed_steps: set[str] = set()
@@ -63,7 +63,7 @@ class WorkflowState(PrivateInit):
         if not self._changed: return
         jobs_by_step = {}
         for ji in self._job_instances.values():
-            k = ji.step.name
+            k = ji.step_name
             d = jobs_by_step.get(k, {})
             d[ji.GetID()] = ji.ToDict()
             jobs_by_step[k] = d
@@ -118,7 +118,7 @@ class WorkflowState(PrivateInit):
                 assert cm.outputs == outs
                 cm.output_mask = {Item(i) for i in md.get("unused_out", [])}
 
-            job_instances: dict[str, JobInstance] = {}
+            job_instances: dict[str, OperationInstance] = {}
             item_instances: dict[str, ItemInstance] = {}
 
             given = set(serialized_state["given"])
@@ -138,7 +138,7 @@ class WorkflowState(PrivateInit):
                 
                 while len(todo_jobs)>0:
                     module_name, id, obj = todo_jobs[0]
-                    ji = JobInstance.FromDict(cm_ref[module_name], id, obj, item_instances)
+                    ji = OperationInstance.FromDict(cm_ref[module_name], id, obj, item_instances)
                     if ji is None: break
                     found = True
                     todo_jobs.pop(0)
@@ -162,7 +162,10 @@ class WorkflowState(PrivateInit):
             state._ids.update(item_instances)
             state._ids.update(job_instances)
             state._job_signatures = dict((state._get_signature(list(ji.inputs.values())), ji) for ji in job_instances.values())
-            state._pending_jobs = dict((k, job_instances[k]) for k in serialized_state["pending_jobs"])
+            for k in serialized_state["pending_jobs"]:
+                ji = job_instances[k]
+                assert isinstance(ji, JobInstance)
+                state._pending_jobs[k] = ji
             state._item_instance_reservations = dict(
                 (item_instances[ik], {job_instances[rk] for rk in jids})
                 for ik, jids in serialized_state["item_instance_reservations"].items()
@@ -175,13 +178,22 @@ class WorkflowState(PrivateInit):
             return state
 
     @classmethod
-    def MakeNew(cls, workspace: str|Path, steps: list[ComputeModule], given: dict[Item, list[Path]]):
+    def MakeNew(cls, workspace: str|Path, steps: list[ComputeModule], given: list[InputGroup]):
         workspace = Path(workspace)
         assert len({m.name for m in steps})==len(steps), f"duplicate compute module name"
         state = WorkflowState(workspace, steps, _key=cls._initializer_key)
-        for ii in [ItemInstance(state._gen_id, i, p) for i, ps in given.items() for p in ps]:
-            state._register_item_inst(ii)
-            state._given_item_instances.append(ii.GetID())
+        for grp in given:
+            root_instance = ItemInstance(state._gen_id, grp.root_type, grp.root_value)
+            group_operation = OperationInstance(state._gen_id, "group input", {grp.root_type.key: root_instance})
+            state._register_op_instance(group_operation)
+            children: dict[str, ItemInstance|list[ItemInstance]] = {}
+            for ii in [ItemInstance(state._gen_id, i, p) for i, ps in grp.children.items() for p in ps] + [root_instance]:
+                state._register_item_inst(ii)
+                state._given_item_instances.append(ii.GetID())
+                v = children.get(ii.item_name, [])
+                if not isinstance(v, list): v = [v]
+                children[ii.item_name] =  v + [ii]
+            group_operation.MarkAsComplete(children)
 
         produced: dict[Item, ComputeModule] = {}
         for step in steps:
@@ -199,7 +211,7 @@ class WorkflowState(PrivateInit):
         return state
 
     @classmethod
-    def ResumeIfPossible(cls, workspace: str|Path, steps: list[ComputeModule], given: dict[Item, list[Path]]):
+    def ResumeIfPossible(cls, workspace: str|Path, steps: list[ComputeModule], given: list[InputGroup]):
         workspace = Path(workspace)
         if os.path.exists(workspace.joinpath(cls._FILE_NAME)):
             return WorkflowState.LoadFromDisk(workspace, steps)
@@ -214,7 +226,7 @@ class WorkflowState(PrivateInit):
         self._ids.add(id)
         return id
 
-    def _get_signature(self, inputs: list[ItemInstance|list[ItemInstance]]):
+    def _get_signature(self, inputs: Iterable[ItemInstance|list[ItemInstance]]):
         inputs_list = [ii for g in [g if isinstance(g, list) else [g] for g in inputs] for ii in g]
         input_keys = sorted(ii.GetID() for ii in inputs_list)
         signature = "-".join(input_keys)
@@ -255,7 +267,7 @@ class WorkflowState(PrivateInit):
 
         def _get_group(start: ItemInstance):
             class Todo:
-                def __init__(self, node: ItemInstance|JobInstance, depth: int) -> None:
+                def __init__(self, node: ItemInstance|JobInstance|OperationInstance, depth: int) -> None:
                     self.node = node
                     self.depth = depth
 
@@ -270,7 +282,7 @@ class WorkflowState(PrivateInit):
 
                 next_name = path[depth+1]
                 if isinstance(instance, ItemInstance):
-                    res = [j for j in self._item_instance_reservations.get(instance, []) if j.step.name == next_name]
+                    res = [j for j in self._item_instance_reservations.get(instance, []) if j.step_name == next_name]
                     if len(res) == 0: return [] # item is intermediate and not used, so chain broken
                     for j in res:
                         todo.append(Todo(j, depth+1))
@@ -407,18 +419,25 @@ class WorkflowState(PrivateInit):
                 # print(module.name, space)
 
                 job_inst = JobInstance(self._gen_id, module, dict((k, _no_single_lists(v)) for k, v in space.items()))
-                self._job_signatures[signature] = job_inst
-                self._pending_jobs[job_inst.GetID()] = job_inst
-                self._job_instances[job_inst.GetID()] = job_inst
-                for ii in job_inst.ListInputInstances():
-                    lst = self._item_instance_reservations.get(ii, set())
-                    lst.add(job_inst)
-                    self._item_instance_reservations[ii] = lst
+                self._register_job_instance(job_inst)
             self._changed = True
 
+    def _register_op_instance(self, inst: OperationInstance):
+        self._job_signatures[self._get_signature(inst.inputs.values())] = inst
+        self._job_instances[inst.GetID()] = inst
+        for ii in inst.ListInputInstances():
+            lst = self._item_instance_reservations.get(ii, set())
+            lst.add(inst)
+            self._item_instance_reservations[ii] = lst
+
+    def _register_job_instance(self, inst: JobInstance):
+        self._pending_jobs[inst.GetID()] = inst
+        self._register_op_instance(inst)
+
     def RegisterJobComplete(self, job_id: str, created: dict[Item, Any]):
+        if job_id not in self._pending_jobs: return
+        job_inst = self._pending_jobs[job_id]
         del self._pending_jobs[job_id]
-        job_inst = self._job_instances[job_id]
 
         expected_outputs = job_inst.step.GetUnmaskedOutputs()
         outs: dict[str, ItemInstance|list[ItemInstance]] = {}
@@ -457,6 +476,7 @@ class WorkflowState(PrivateInit):
             todo = [parent]
             while len(todo)>0:
                 curr = todo.pop()
+                if not isinstance(curr, JobInstance): continue
                 deleted_job_instances.add(curr)
                 out = curr.ListOutputInstances()
                 if out is None: continue
@@ -536,6 +556,37 @@ class TerminationWatcher:
     self.kill_now = True
     self.sync.PushNotify()
 
+class InputGroup:
+    def __init__(self, by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
+        abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
+        root, root_value = by
+        self.root_type = root
+        self.root_value: str|Path = abs_path_if_path(root_value)
+        self.children: dict[Item, list[str]|list[Path]] = dict((k, [abs_path_if_path(p) for p in v] if isinstance(v, list) else [abs_path_if_path(v)]) for k, v in children.items())
+
+    def LinkInputs(self, workspace: Path):
+        here = os.getcwd()
+        os.chdir(workspace)
+        input_dir = Workflow.INPUT_DIR
+        os.makedirs(input_dir, exist_ok=True)
+        for item in list(self.children):
+            parsed = []
+            values = self.children[item]
+            for p in values:
+                if isinstance(p, str):
+                    parsed.append(p)
+                    continue
+                assert os.path.exists(p), f"given [{p}] doesn't exist"
+                linked = input_dir.joinpath(p.name)
+                if linked.exists(): os.remove(linked)
+                os.symlink(p, linked)
+                parsed.append(linked)
+            self.children[item] = parsed
+        os.chdir(here)
+    
+    def ListItems(self):
+        return [self.root_type] + list(self.children)
+
 class Workflow:
     INPUT_DIR = Path("inputs")
     OUTPUT_DIR = Path("outputs")
@@ -585,7 +636,7 @@ class Workflow:
             os.symlink(f"../{p}", self.OUTPUT_DIR.joinpath(link))
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
-        given: dict[Item, str|Path|list[str|Path]],
+        given: list[InputGroup],
         executor: Executor, params: Params=Params(),
         regenerate: list[Item]=list(),
         _catch_errors: bool = True):
@@ -596,15 +647,13 @@ class Workflow:
 
         # abs. path before change to working dir
         sys.path = [os.path.abspath(p) for p in sys.path]
-        abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
-        abs_given = dict((k, [abs_path_if_path(p) for p in v] if isinstance(v, list) else [abs_path_if_path(v)]) for k, v in given.items())
 
         def _timestamp():
             return f"{dt.now().strftime('%H:%M:%S')}>"
 
         sync = Sync()
         watcher = TerminationWatcher(sync)
-        def _run_job_async(jobi: JobInstance, procedure: Callable[[], JobResult]):
+        def _run_job_async(jobi: OperationInstance, procedure: Callable[[], JobResult]):
             def _job():
                 try:
                     result = procedure()
@@ -621,21 +670,9 @@ class Workflow:
 
         def _run():
             # make links for inputs in workspace
-            input_dir = self.INPUT_DIR
-            os.makedirs(input_dir, exist_ok=True)
-            inputs: dict[Item, list[Path]] = {}
-            for item, values in abs_given.items():
-                parsed = []
-                for p in values:
-                    if isinstance(p, str):
-                        parsed.append(p)
-                        continue
-                    assert os.path.exists(p), f"given [{p}] doesn't exist"
-                    linked = input_dir.joinpath(p.name)
-                    if linked.exists(): os.remove(linked)
-                    os.symlink(p, linked)
-                    parsed.append(linked)
-                inputs[item] = parsed
+            for g in given:
+                g.LinkInputs(workspace=workspace)
+            inputs = [i for g in [g.ListItems() for g in given] for i in g]
             _steps, dep_map = self._calculate(inputs, targets)
             if _steps is False:
                 print(f'no solution exists')
@@ -643,7 +680,7 @@ class Workflow:
             steps: list[ComputeModule] = [s.reference for s in _steps]
             print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
             self._check_feasible(steps, targets, dep_map)
-            state = WorkflowState.ResumeIfPossible('./', steps, inputs)
+            state = WorkflowState.ResumeIfPossible('./', steps, given)
             if len(regenerate)>0:
                 print(f'will regenerate [{", ".join([r.key for r in regenerate])}] and downstream dependents')
                 state.Invalidate(regenerate)

@@ -41,11 +41,9 @@ class Params:
         threads: int=4,
         mem_gb: int=8,
         reference_folder: Path=Path(''),
-        logistic_threads: int|None=None,
     ) -> None:
         self.file_system_wait_sec = file_system_wait_sec
         self.threads = threads
-        self.logistic_threads = logistic_threads
         self.mem_gb = mem_gb
         self.reference_folder = reference_folder
 
@@ -211,7 +209,6 @@ class ComputeModule(PrivateInit):
         threads: int|None = None,
         memory_gb: int|None = None,
         requirements: set[str] = set(),
-        is_logistical: bool = False,
         **kwargs
     ) -> None:
 
@@ -228,7 +225,6 @@ class ComputeModule(PrivateInit):
         self.threads = threads
         self.memory_gb = memory_gb
         self.requirements = requirements
-        self.is_logistical = is_logistical
 
     def Setup(self, reference_folder: Path, install_type: str):
         snakefile = f"{self.location}/setup/setup.smk"
@@ -317,7 +313,6 @@ class ModuleBuilder(AutoPopulate):
     _threads: int
     _memory_gb: int
     _requirements: set[str]
-    _logistical: bool
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -325,7 +320,6 @@ class ModuleBuilder(AutoPopulate):
         self._inputs = set()
         self._outputs = set()
         self._requirements = set()
-        self._logistical = False
 
     def SetProcedure(self, procedure: Callable[[JobContext], JobResult]):
         self._procedure = procedure
@@ -355,10 +349,6 @@ class ModuleBuilder(AutoPopulate):
         self._location = Path(os.path.abspath(def_path.joinpath('../..')))
         return self
 
-    def IsLogistical(self):
-        self._logistical = True
-        return self
-
     def SuggestedResources(self, threads: int, memory_gb: int):
         assert threads>0
         assert memory_gb>0
@@ -383,7 +373,6 @@ class ModuleBuilder(AutoPopulate):
             threads=self._threads,
             memory_gb=self._memory_gb,
             requirements=self._requirements,
-            is_logistical=self._logistical
         )
         return cm
 

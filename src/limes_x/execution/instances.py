@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+from sys import setprofile
 from typing import Callable, Any
 from pathlib import Path
 
@@ -18,12 +19,12 @@ class _with_hashable_id:
     def GetID(self):
         return self.__id
 
-class JobInstance(_with_hashable_id):
+class OperationInstance(_with_hashable_id):
     __ID_LENGTH = 6
-    def __init__(self, id_gen: Callable[[int], str], step: ComputeModule,
+    def __init__(self, id_gen: Callable[[int], str], step_name: str,
         inputs: dict[str, ItemInstance|list[ItemInstance]]) -> None:
-        super().__init__(id_gen(JobInstance.__ID_LENGTH))
-        self.step = step
+        super().__init__(id_gen(OperationInstance.__ID_LENGTH))
+        self.step_name = step_name
         self.inputs = inputs
         self._input_instances = self._flatten_values(self.inputs)
 
@@ -32,7 +33,7 @@ class JobInstance(_with_hashable_id):
         self.complete = False
 
     def __repr__(self) -> str:
-        return f"<ji: {self.step.name}>"
+        return f"<ji: {self.step_name}>"
 
     def _flatten_values(self, data: dict[Any, ItemInstance|list[ItemInstance]]):
         insts: list[ItemInstance] = []
@@ -42,9 +43,6 @@ class JobInstance(_with_hashable_id):
             else:
                 insts.append(ii)
         return insts
-
-    def GetFolderName(self):
-        return f"{self.step.name}--{self.GetID()}"
 
     def ListInputInstances(self):
         return self._input_instances
@@ -100,8 +98,17 @@ class JobInstance(_with_hashable_id):
         inst.complete = data["complete"]
         return inst
 
+class JobInstance(OperationInstance):
+    def __init__(self, id_gen: Callable[[int], str], step: ComputeModule,
+        inputs: dict[str, ItemInstance|list[ItemInstance]]) -> None:
+        self.step = step
+        super().__init__(id_gen, step.name, inputs)
+
+    def GetFolderName(self):
+        return f"{self.step_name}--{self.GetID()}"
+
 class ItemInstance(_with_hashable_id):
-    def __init__(self, id_gen: Callable[[int], str], item:Item, value: str|Path, made_by: JobInstance|None=None) -> None:
+    def __init__(self, id_gen: Callable[[int], str], item:Item, value: str|Path, made_by: OperationInstance|None=None) -> None:
         super().__init__(id_gen(12))
         self.item_name = item.key
         self.value = value
@@ -121,7 +128,7 @@ class ItemInstance(_with_hashable_id):
         return self_dict
     
     @classmethod
-    def FromDict(cls, item_key: str, id: str, data: dict, job_instance_ref: dict[str, JobInstance], given: set[str]):
+    def FromDict(cls, item_key: str, id: str, data: dict, job_instance_ref: dict[str, OperationInstance], given: set[str]):
         get_id = lambda _: id
         type_str = data["type"]
         path_type_str = str(type(Path('')))
