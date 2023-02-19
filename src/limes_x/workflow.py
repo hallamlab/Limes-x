@@ -7,7 +7,6 @@ import uuid
 from threading import Thread, Condition
 import signal
 from datetime import datetime as dt
-import psutil
 
 from .execution.solver import DependencySolver
 from .common.utils import PrivateInit
