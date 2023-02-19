@@ -574,10 +574,15 @@ class TerminationWatcher:
     self.kill_now = True
     self.sync.PushNotify()
 
-    current_process = psutil.Process()
-    children = current_process.children(recursive=True)
-    for child in children:
-        child.kill()
+    try:
+        import psutil
+
+        current_process = psutil.Process()
+        children = current_process.children(recursive=True)
+        for child in children:
+            child.kill()
+    except ModuleNotFoundError:
+        print("momdule <psutil> required to stop subprocesses, some may still be alive...")
 
 class InputGroup:
     def __init__(self, by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
