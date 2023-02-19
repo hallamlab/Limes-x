@@ -1,4 +1,3 @@
-from re import VERBOSE
 import sys, os
 from pathlib import Path
 import json
@@ -15,27 +14,27 @@ if __name__ == '__main__':
 
     cmd_history = []
     err_log, out_log = [], []
+    realtime_log = WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath('realtime.log')
+    def _on_io(s: str, log: list):
+        timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
+        if s.endswith('\n'): s = s[:-1]
+        line = f'{timestamp} {s}'
+        log.append(line)
+        with open(realtime_log, 'a') as f:
+            f.write(line+'\n')
+        if VERBOSE: print(line)
     def _shell(cmd: str):
-        realtime_log = WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath('realtime.log')
         lines = cmd.split('\n')
         code = 0
+        start_time = f"{dt.now().strftime('%d%b%Y-%H:%M:%S')}>"
+        cmd_history.append(f"--- {start_time} ---")
         for line in lines:
             line = line.strip()
             if line == "": continue
-            start_time = f"{dt.now().strftime('%d%b%Y-%H:%M:%S')}>"
             cmd_history.append(f"{line}")
-            cmd_history.append(f"--- {start_time} ---")
-            def _on_io(s: str, log: list):
-                timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
-                if s.endswith('\n'): s = s[:-1]
-                line = f'{timestamp} {s}'
-                log.append(line)
-                with open(realtime_log, 'a') as f:
-                    f.write(line+'\n')
-                if VERBOSE: print(line)
 
         code = LiveShell(
-            CONTEXT.shell_prefix+" "+cmd, echo_cmd=False,
+            cmd, echo_cmd=False,
             onOut=lambda s: _on_io(s, out_log),
             onErr=lambda s: _on_io(s, err_log),
         )

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 def ParseArgs(python_path: list[str]|None=None):
     if python_path is not None:
         sys.path = python_path
-    VERBOSE = bool(sys.argv.pop())
+    VERBOSE = sys.argv.pop() == "True"
     _paths: list = list(sys.argv[1:])
     assert len(_paths) == 3, f"bad receive {_paths}"
     MODULE_PATH, WORKSPACE, RELATIVE_OUTPUT_PATH = [Path(p) for p in _paths[:3]]
