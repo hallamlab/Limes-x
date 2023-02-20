@@ -36,7 +36,7 @@ class WorkflowState(PrivateInit):
         self._steps = steps
         self._finihsed_steps: set[str] = set()
         self._completed_modules: list[str] = []
-        self._dependency_map: dict[str, set[str]] = dependency_map # item name to list[op_names]
+        self._parent_map: dict[str, set[str]] = dependency_map # item name to list[op_names]
         for s in steps:
             for i in s.inputs:
                 self._add_dependency_mapping(i.key, s.name)
@@ -76,19 +76,19 @@ class WorkflowState(PrivateInit):
         modules = {}
         for m in self._steps:
             md = {}
-            ins = []
-            for i in m.inputs:
-                d = {"item": i.key}
-                ins.append(d)
-            md["in"] = ins
-            if len(m._group_by)>0: md["input_groups"] = dict((k.key, v.key) for k, v in m._group_by.items())
+            md["in"] = [i.key for i in m.inputs]
+            if len(m._group_by)>0:
+                input_groups = {}
+                for k, v in m._group_by.items():
+                    input_groups[v.key] = input_groups.get(v.key, [])+[k.key]
+                md["input_groups"] = input_groups
             md["out"] = [i.key for i in m.outputs]
             if len(m.output_mask)>0: md["unused_out"] = [i.key for i in m.output_mask]
             modules[m.name] = md
         
         state = {
             "modules": modules,
-            "dependency_map": dict((k, list(v)) for k, v in self._dependency_map.items()),
+            "parent_map": dict((k, list(v)) for k, v in self._parent_map.items()),
             "module_executions": jobs_by_step,
             "completed_modules": self._completed_modules,
             "item_instances": item_instances,
@@ -111,7 +111,8 @@ class WorkflowState(PrivateInit):
             serialized_state = json.load(j)
 
             for name, md in serialized_state["modules"].items():
-                ins = {Item(i["item"]) for i in md["in"]}
+                # group_by from module definition
+                ins = {Item(i) for i in md["in"]}
                 outs = {Item(i) for i in md["out"]}
                 cm = cm_ref[name]
                 assert cm.inputs == ins
@@ -121,33 +122,35 @@ class WorkflowState(PrivateInit):
             job_instances: dict[str, JobInstance] = {}
             item_instances: dict[str, ItemInstance] = {}
 
-            given = set(serialized_state["given"])
             todo_items = _flatten(serialized_state["item_instances"])
             todo_jobs = _flatten(serialized_state["module_executions"])
             job_outputs: dict[str, dict] = {}
 
             while len(todo_items)>0 or len(todo_jobs)>0:
                 found = False
-                while len(todo_items)>0:
-                    item_name, id, obj = todo_items[0]
-                    ii = ItemInstance.FromDict(item_name, id, obj, job_instances, given)
-                    if ii is None: break
+                len_todo = len(todo_items)
+                for fi in range(len_todo):
+                    i = len_todo-fi-1 # back to front
+                    item_name, id, obj = todo_items[i]
+                    ii = ItemInstance.FromDict(item_name, id, obj, item_instances, job_instances)
+                    if ii is None: continue
                     found = True
-                    todo_items.pop(0)
+                    todo_items.pop(i)
                     item_instances[id] = ii
                 
-                while len(todo_jobs)>0:
-                    module_name, id, obj = todo_jobs[0]
-                    ji = JobInstance.FromDict(module_name, id, obj, item_instances)
-                    if ji is None: break
+                len_todo = len(todo_jobs)
+                for fi in range(len_todo):
+                    i = len_todo-fi-1 # back to front
+                    module_name, id, obj = todo_jobs[i]
+                    ji = JobInstance.FromDict(cm_ref[module_name], id, obj, item_instances)
+                    if ji is None: continue
                     found = True
-                    todo_jobs.pop(0)
-                    ji.complete = True
+                    todo_jobs.pop(i)
                     job_instances[id] = ji
 
                     outs = obj.get("outputs")
                     if outs is not None:
-                        job_outputs[ji.GetID()] = outs
+                        job_outputs[id] = outs
 
                 if not found:
                     raise ValueError("failed to load state, the save may be corrupted")
@@ -157,12 +160,13 @@ class WorkflowState(PrivateInit):
                 job_instances[jid].MarkAsComplete(outs)
 
             state = WorkflowState(workspace, steps,
-                dependency_map=dict((k, set(v)) for k, v in serialized_state["dependency_map"].items()),
+                dependency_map=dict((k, set(v)) for k, v in serialized_state["parent_map"].items()),
                 _key=cls._initializer_key)
             state._completed_modules = serialized_state["completed_modules"]
-            state._given_item_instances = list(given)
+            state._given_item_instances = serialized_state["given"]
             state._ids.update(item_instances)
             state._ids.update(job_instances)
+            state._job_instances = job_instances
             state._job_signatures = dict((state._get_signature(list(ji.inputs.values())), ji) for ji in job_instances.values())
             for k in serialized_state["pending_jobs"]:
                 ji = job_instances[k]
@@ -201,6 +205,7 @@ class WorkflowState(PrivateInit):
                 v = children.get(ii.item_name, [])
                 if not isinstance(v, list): v = [v]
                 children[ii.item_name] =  v + [ii]
+                if ii != root_instance: ii.made_by = root_instance
 
         produced: dict[Item, ComputeModule] = {}
         for step in steps:
@@ -243,9 +248,9 @@ class WorkflowState(PrivateInit):
         return list(self._pending_jobs.values())        
 
     def _add_dependency_mapping(self, start: str, end: str):
-        mapped = self._dependency_map.get(start, set())
+        mapped = self._parent_map.get(start, set())
         mapped.add(end)
-        self._dependency_map[start] = mapped
+        self._parent_map[start] = mapped
 
     def _find_groupby_path(self, start: str, target: str):
         class Todo:
@@ -263,7 +268,7 @@ class WorkflowState(PrivateInit):
             if curr == target and len(path)+1 > len(candidate):
                 candidate = path+[curr] # found one, but want longest
 
-            for nnode in self._dependency_map.get(curr, set()):
+            for nnode in self._parent_map.get(curr, set()):
                 if nnode in seen: continue
                 todo.append(Todo(nnode, path+[curr]))
 
@@ -300,6 +305,7 @@ class WorkflowState(PrivateInit):
                 if isinstance(instance, ItemInstance):
                     if next_name in self._item_lookup:
                         for i in self._item_lookup[next_name]:
+                            if i.made_by != instance: continue
                             todo.append(Todo(i, depth+1))
                         continue # item linked via logistical action, not by compute job
                     res = [j for j in self._item_instance_reservations.get(instance, []) if j.step.name == next_name]
@@ -359,15 +365,6 @@ class WorkflowState(PrivateInit):
             def __init__(self) -> None:
                 self.namespaces: list[_namespace] = [_namespace()]
 
-            def Cross(self, group: list[ItemInstance]):
-                new_nss: list[_namespace] = []
-                for ns in self.namespaces:
-                    for iis in group:
-                        new = ns.Copy()
-                        new.Add(iis)
-                        new_nss.append(new)
-                self.namespaces = new_nss
-
             def MergeGroup(self, group: dict[ItemInstance, list[ItemInstance]]):
                 root_item_name = next(iter(group)).item_name
                 roots = {r for r in [ns.GetRootInstance(root_item_name) for ns in self.namespaces] if r is not None}
@@ -412,7 +409,8 @@ class WorkflowState(PrivateInit):
             seen_roots = set() # item names
             for item_name, dict_or_list in input_groups.items():
                 if isinstance(dict_or_list, list):
-                    input_namespaces.Cross(dict_or_list)
+                    input_namespaces.CrossGroup(dict((ii, [ii]) for ii in dict_or_list))
+                    seen_roots.add(dict_or_list[0].item_name)
                 else: # is dict
                     root = next(iter(dict_or_list)).item_name
                     if root in seen_roots:
@@ -749,9 +747,10 @@ class Workflow:
                         header = f"{_timestamp()} {job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
                             print(f"{header} failed: [{result.error_message}]")
+                            state.RegisterJobComplete(result.made_by, {})
                         else:
                             print(f"{header} completed")
-                        state.RegisterJobComplete(result.made_by, result.manifest)
+                            state.RegisterJobComplete(result.made_by, result.manifest)
                         if result.manifest is not None:
                             for t in targets:
                                 if t in result.manifest:

@@ -1,6 +1,4 @@
 from __future__ import annotations
-import json
-from sys import setprofile
 from typing import Callable, Any
 from pathlib import Path
 
@@ -96,13 +94,14 @@ class JobInstance(_with_hashable_id):
         inputs = _load(data["inputs"])
         if inputs is None: return None
         inst = JobInstance(get_id, step, inputs)
-        outputs = _load(data["outputs"])
-        if outputs is not None: inst.outputs = outputs
+        raw_outs = data.get("outputs")
+        if raw_outs is not None:
+            inst.outputs = _load(raw_outs)
         inst.complete = data["complete"]
         return inst
 
 class ItemInstance(_with_hashable_id):
-    def __init__(self, id_gen: Callable[[int], str], item:Item, value: str|Path, made_by: JobInstance|None=None) -> None:
+    def __init__(self, id_gen: Callable[[int], str], item:Item, value: str|Path, made_by: JobInstance|ItemInstance|None=None) -> None:
         super().__init__(id_gen(12))
         self.item_name = item.key
         self.value = value
@@ -122,7 +121,9 @@ class ItemInstance(_with_hashable_id):
         return self_dict
     
     @classmethod
-    def FromDict(cls, item_key: str, id: str, data: dict, job_instance_ref: dict[str, JobInstance], given: set[str]):
+    def FromDict(cls, item_key: str, id: str, data: dict, 
+        item_instance_ref: dict[str, ItemInstance], job_instance_ref: dict[str, JobInstance]):
+
         get_id = lambda _: id
         type_str = data["type"]
         path_type_str = str(type(Path('')))
@@ -130,11 +131,12 @@ class ItemInstance(_with_hashable_id):
         if type_str == path_type_str: value = Path(value)
         made_by_id = data.get("made_by")
 
-
-
-        if id not in given:
-            if made_by_id not in job_instance_ref: return None
-            made_by = job_instance_ref[made_by_id] if made_by_id is not None else None
-        else:
-            made_by = None # was given
+        made_by = None
+        if made_by_id is not None:
+            if made_by_id in job_instance_ref:
+                made_by = job_instance_ref[made_by_id]
+            elif made_by_id in item_instance_ref:
+                made_by = item_instance_ref[made_by_id]
+            else:
+                return None # required instance not found yet
         return ItemInstance(get_id, Item(item_key), value, made_by=made_by)
