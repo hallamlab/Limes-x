@@ -659,7 +659,7 @@ class Workflow:
             toks = str(p).split('/')
             run_inst_dir = toks[0]
             fname = toks[-1]
-            link = f"{run_inst_dir}--{fname}"
+            link = f"{run_inst_dir}.{fname}"
             os.symlink(original, self.OUTPUT_DIR.joinpath(link))
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
