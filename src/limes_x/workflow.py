@@ -650,17 +650,22 @@ class Workflow:
             for i, g in cm._group_by.items():
                 assert any(g in pre.inputs for pre in deps), f"invalid grouping: [{g.key}] is not upstream of [{i.key}] for module [{cm.name}]"
 
-    def _link_output(self, paths: Path|list[Path]):
-        if isinstance(paths, Path): paths = [paths]
+    def _link_output(self, job_instance: JobInstance, target: Item, values: str|Path|list[str]|list[Path]):
+        _values: Any = values
+        if not isinstance(values, list): _values = [values]
         if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
-        for p in paths: # paths should be relative to ws
+        prefix = f"{job_instance.step.name}--{job_instance.GetID()}"
+        for p in _values: # paths should be relative to ws
             if not p.exists(): continue
-            original = Path(f"../{p}")
-            toks = str(p).split('/')
-            run_inst_dir = toks[0]
-            fname = toks[-1]
-            link = f"{run_inst_dir}.{fname}"
-            os.symlink(original, self.OUTPUT_DIR.joinpath(link))
+            if isinstance(p, Path):
+                original = Path(f"../{p}")
+                toks = str(p).split('/')
+                fname = toks[-1]
+                link = f"{prefix}.{fname}"
+                os.symlink(original, self.OUTPUT_DIR.joinpath(link))
+            else:
+                with open(self.OUTPUT_DIR.joinpath(f"{prefix}.{target.key}.txt"), 'a') as out:
+                    out.write(f"{p}\n")
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: list[InputGroup],
@@ -754,7 +759,7 @@ class Workflow:
                         if result.manifest is not None:
                             for t in targets:
                                 if t in result.manifest:
-                                    self._link_output(result.manifest[t])
+                                    self._link_output(job_instance, t, result.manifest[t])
                 except KeyboardInterrupt:
                     print("force stopped")
 
