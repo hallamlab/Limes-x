@@ -148,6 +148,7 @@ class CloudExecutor(Executor):
                         requirements.remove(req)
                     else:
                         print(f'zipping {req} for cloud')
+                        sys.stdout.flush()
                         _shell(f"""\
                             cd {params.reference_folder}
                             tar -hcf - {req} | pigz -5 -p {THREADS} >{req}.{EXT}
@@ -173,6 +174,7 @@ class CloudExecutor(Executor):
 
             for i, f in enumerate(to_zip):
                 print(f"zipping {i+1} of {len(to_zip)} inputs: {f}")
+                sys.stdout.flush()
                 _shell(f"""\
                     cd inputs
                     tar -hcf - "{f}" | pigz -5 -p {THREADS} >"{f}.{EXT}"
@@ -186,6 +188,8 @@ class CloudExecutor(Executor):
                 tar --exclude=__pycache__ -hcf - {limes_x.__name__} | pigz -5 -p {THREADS} >{HERE}/{self._SRC_FOLDER_NAME}.{EXT}
             """)    
             if prerun is not None: prerun(inputs_dir)
+            sys.stdout.flush()
+            
         super().__init__(execute_procedure=logistical_procedure, prepare_procedure=_prepare_run)
         self._cloud_procedure = cloud_procedure
         self._tmp_dir_name = tmp_dir_name
