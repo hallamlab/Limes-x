@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os, sys
+import shutil
 from pathlib import Path
 from typing import Any, Callable, Iterable
 import json
@@ -470,54 +471,54 @@ class WorkflowState(PrivateInit):
     def Invalidate(self, items: Iterable[Item]):
         old_save = self._workspace.joinpath(self._FILE_NAME)
         if not old_save.exists():
-            print("invalidate did nothing since nothing has been done yet")
+            print("invalidate did nothing since this is the first run")
             return
-
         self._changed = True
-        deleted_job_instances: set[JobInstance] = set()
+
+        # get steps and items to delete
+        steps_to_delete: list[ComputeModule] = []
+        for step in self._steps:
+            if not any(o in items for o in step.outputs): continue
+            steps_to_delete.append(step)
+        todo = [s.name for s in steps_to_delete]
+        names_to_delete = set()
+        while len(todo)>0:
+            curr = todo.pop()
+            if curr in names_to_delete: continue
+            names_to_delete.add(curr)
+            todo += [c for c in self._parent_map.get(curr, [])]
+
+        # get instances of each item and step
         given_item_instances = set(self._given_item_instances)
-        # invalidate parent and downstream
-        def _invalidate(ii: ItemInstance):
-            def _invalidate_one_item_instance(inst: ItemInstance):
-                if inst.GetID() in given_item_instances: return
-                if inst.item_name in self._item_lookup: del self._item_lookup[inst.item_name]
-                if inst in self._item_instance_reservations: del self._item_instance_reservations[inst]
+        item_instances_to_delete: list[ItemInstance] = []
+        job_instances_to_delete: list[JobInstance] = []
+        for k in names_to_delete:
+            if k not in self._item_lookup: continue
+            item_instances_to_delete += self._item_lookup[k]
+        for ji in self._job_instances.values():
+            if ji.step in steps_to_delete:
+                job_instances_to_delete.append(ji) 
 
-            parent = ii.made_by
-            if parent is None:
-                _invalidate_one_item_instance(ii)
-                return
-            
-            todo = [parent]
-            while len(todo)>0:
-                curr = todo.pop()
-                if not isinstance(curr, JobInstance): continue
-                deleted_job_instances.add(curr)
-                out = curr.ListOutputInstances()
-                if out is None: continue
-                for ii in out:
-                    todo += [ji for ji in self._item_instance_reservations.get(ii, [])]
-                    _invalidate_one_item_instance(ii)
-
-        for item in items:
-            for ii in list(self._item_lookup[item.key]):
-                _invalidate(ii)
-
-        # remove deleted jobs
-        previous_iis: set[ItemInstance] = set()
-        for ji in deleted_job_instances:
-            previous_iis.update(ji.ListInputInstances())
+        # remove job instances
+        for ji in job_instances_to_delete:
             jk = ji.GetID()
             if jk in self._job_instances: del self._job_instances[jk]
             if jk in self._pending_jobs: del self._pending_jobs[jk]
             sig = self._get_signature(list(ji.inputs.values()))
             if sig in self._job_signatures: del self._job_signatures[sig]
 
-        # remove item instance reservations of deleted jobs
-        for ii in previous_iis:
-            if ii not in self._item_instance_reservations: continue
+        # remove item instances
+        for ii in item_instances_to_delete:
+            if ii in given_item_instances: continue
+            if ii.GetID() in given_item_instances: return
+            if ii.item_name in self._item_lookup: del self._item_lookup[ii.item_name]
+            if ii in self._item_instance_reservations:
+                del self._item_instance_reservations[ii]
+            else: 
+                continue
+            # remove item instance reservations of deleted jobs
             reservations = self._item_instance_reservations[ii]
-            reservations = reservations.difference(deleted_job_instances)
+            reservations = reservations.difference(job_instances_to_delete)
             if len(reservations)>0:
                 self._item_instance_reservations[ii] = reservations
             else:
@@ -531,7 +532,7 @@ class WorkflowState(PrivateInit):
             if previous_folder.exists(): continue
             break
         
-        deleted_jobs_folders = [ji.GetFolderName() for ji in deleted_job_instances]
+        deleted_jobs_folders = [ji.GetFolderName() for ji in job_instances_to_delete]
         NL = '\n'
         cmd = f"""\
             mkdir -p {previous_folder}
@@ -582,6 +583,7 @@ class TerminationWatcher:
         print("momdule <psutil> required to stop subprocesses, some may still be alive...")
 
 class InputGroup:
+    input_index = 0
     def __init__(self, by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
         abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
         root, root_value = by
@@ -591,9 +593,8 @@ class InputGroup:
 
     def LinkInputs(self, workspace: Path):
         here = os.getcwd()
-        os.chdir(workspace)
-        input_dir = Workflow.INPUT_DIR
-        os.makedirs(input_dir, exist_ok=True)
+        input_dir = workspace.joinpath(Workflow.INPUT_DIR)
+        os.chdir(input_dir)
         for item in list(self.children):
             parsed = []
             values = self.children[item]
@@ -602,8 +603,8 @@ class InputGroup:
                     parsed.append(p)
                     continue
                 assert os.path.exists(p), f"given [{p}] doesn't exist"
-                linked = input_dir.joinpath(p.name)
-                if linked.exists(): os.remove(linked)
+                InputGroup.input_index+=1
+                linked = input_dir.joinpath(f"{InputGroup.input_index:04}--{p.name}")
                 os.symlink(p, linked)
                 parsed.append(linked)
             self.children[item] = parsed
@@ -702,6 +703,9 @@ class Workflow:
 
         def _run():
             # make links for inputs in workspace
+            inputs_dir = Workflow.INPUT_DIR
+            if os.path.exists(inputs_dir): shutil.rmtree(inputs_dir)
+            os.makedirs(inputs_dir)
             for g in given:
                 g.LinkInputs(workspace=workspace)
             inputs = [i for g in [g.ListItems() for g in given] for i in g]
