@@ -593,8 +593,18 @@ class InputGroup:
 
     def LinkInputs(self, workspace: Path):
         here = os.getcwd()
-        input_dir = workspace.joinpath(Workflow.INPUT_DIR)
-        os.chdir(input_dir)
+        os.chdir(workspace)
+        input_dir = Path(Workflow.INPUT_DIR)
+        
+        def _fix(item, path):
+            assert os.path.exists(path), f"given [{path}] doesn't exist"
+            InputGroup.input_index+=1
+            linked = input_dir.joinpath(f"{InputGroup.input_index:04}--{path.name}")
+            os.symlink(path, linked)
+            return linked
+
+        if isinstance(self.root_value, Path):
+            self.root_value = _fix(self.root_type, self.root_value)
         for item in list(self.children):
             parsed = []
             values = self.children[item]
@@ -602,10 +612,7 @@ class InputGroup:
                 if isinstance(p, str):
                     parsed.append(p)
                     continue
-                assert os.path.exists(p), f"given [{p}] doesn't exist"
-                InputGroup.input_index+=1
-                linked = input_dir.joinpath(f"{InputGroup.input_index:04}--{p.name}")
-                os.symlink(p, linked)
+                linked = _fix(item, p)
                 parsed.append(linked)
             self.children[item] = parsed
         os.chdir(here)

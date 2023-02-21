@@ -69,9 +69,12 @@ class Executor:
 
         from ..environments import local
         entry_point = Path(os.path.abspath(inspect.getfile(local)))
+        args = [
+            entry_point, job.instance.step.location, workspace, job.context.output_folder, False,
+        ]
         job.run_command = f"""\
             PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False}
+            python {" ".join(f'"{a}"' for a in args)}
         """[:-1].replace("  ", "")
         success, msg = self._execute_procedure(job)
 
@@ -199,9 +202,12 @@ class CloudExecutor(Executor):
 
         from ..environments import cloud
         entry_point = Path(os.path.abspath(inspect.getfile(cloud)))
+        args = [
+            entry_point, job.instance.step.location, workspace, job.context.output_folder, False,
+            workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}'), self._tmp_dir_name, ":".join(self._NO_ZIP)
+        ]
         job.run_command = f"""\
-            python {entry_point} {job.instance.step.location} {workspace} {job.context.output_folder} {False} \
-                {workspace.joinpath(f'{self._SRC_FOLDER_NAME}.{self._EXT}')} {self._tmp_dir_name} {":".join(self._NO_ZIP)} \
+            python {" ".join(f'"{a}"' for a in args)}\
         """.replace("  ", "")
         job._verbose = False # since cloud
 
