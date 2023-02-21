@@ -47,7 +47,7 @@ if __name__ == '__main__':
 
     cmd_history = []
     err_log, out_log = [], []
-    def _shell(cmd: str, is_child=True):
+    def _shell(cmd: str, is_child: bool):
         realtime_log = WORKSPACE.joinpath(RELATIVE_OUTPUT_PATH).joinpath('realtime.log')
         cmd = cmd.replace("  ", "")
         lines = cmd.split('\n')
@@ -77,7 +77,7 @@ if __name__ == '__main__':
         cp -r {MODULE_PATH}/{ComputeModule.LIB_FOLDER} {CLOUD_LIB}/{module_name}
         cd {CLOUD_WS}
         ls -lh
-    """)
+    """, is_child=False)
 
     requirements = [str(CONTEXT.params.reference_folder.joinpath(req)) for req in THIS_MODULE.requirements]
     zreqs, cpreqs = [], []
@@ -92,12 +92,12 @@ if __name__ == '__main__':
         {NEWLINE.join(f"tar -hxf {req}.tgz" for req in zreqs)}
         {NEWLINE.join(f"cp {req} ./" for req in cpreqs)}
         ls -lh
-    """)
+    """, is_child=False)
     CONTEXT.params.reference_folder = CLOUD_REF
     CONTEXT.lib = CLOUD_LIB
     CONTEXT.Save(CLOUD_WS)
 
-    _shell("echo $(date) running...")
+    _shell("echo $(date) running...", is_child=False)
     _shell(f"""\
         python {env.__file__} {CLOUD_LIB}/{module_name} {CLOUD_WS} {RELATIVE_OUTPUT_PATH} {True}\
     """, is_child=True)
@@ -113,7 +113,7 @@ if __name__ == '__main__':
         {NEWLINE.join(f"tar -cf - {f} | pigz -5 -p {CONTEXT.params.threads} >{Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)}/{f}.tgz" for f in outs)}
         echo $(date) "done"
         du -sh *
-    """)
+    """, is_child=False)
 
     result_json = 'result.json'
     result_path = RELATIVE_OUTPUT_PATH.joinpath(result_json)

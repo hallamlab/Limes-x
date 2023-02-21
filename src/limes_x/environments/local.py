@@ -19,7 +19,10 @@ if __name__ == '__main__':
         timestamp = f"{dt.now().strftime('%H:%M:%S')}>"
         if s.endswith('\n'): s = s[:-1]
         line = f'{timestamp} {s}'
-        log.append(line)
+        if not s.endswith('\r'):
+            log.append(line)
+        else:
+            line = line[:-1]
         with open(realtime_log, 'a') as f:
             f.write(line+'\n')
         if VERBOSE: print(line)

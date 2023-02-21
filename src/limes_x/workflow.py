@@ -679,7 +679,9 @@ class Workflow:
         given: list[InputGroup],
         executor: Executor, params: Params=Params(),
         regenerate: list[Item]=list(),
-        _catch_errors: bool = True):
+        max_concurrent: int = 256,
+        _catch_errors: bool = True,
+    ):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
@@ -738,7 +740,8 @@ class Workflow:
             executor.PrepareRun(steps, self.INPUT_DIR, params)
             print(f">>> start")
 
-            jobs_ran: dict[str, JobInstance] = {}
+            jobs_ran = set() # this may be redundant
+            jobs_running: dict[str, JobInstance] = {}
             while not watcher.kill_now:
                 pending_jobs = state.GetPendingJobs()
                 if len(pending_jobs) == 0: break
@@ -746,20 +749,23 @@ class Workflow:
                 for job in pending_jobs:
                     if watcher.kill_now:
                         raise KeyboardInterrupt()
+                    if len(jobs_running) >= max_concurrent: break
 
                     jid = job.GetID()
                     if jid in jobs_ran: continue
                     header = f"{_timestamp()} {job.step.name}:{jid}"
                     print(f"{header} started")
                     _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy(), targets))
-                    jobs_ran[jid] = job
+                    jobs_running[jid] = job
+                    jobs_ran.add(jid)
 
                 sys.stdout.flush()
                 try:
                     for result in sync.WaitAll():
                         if result is None:
                             raise KeyboardInterrupt()
-                        job_instance = jobs_ran[result.made_by]
+                        job_instance = jobs_running[result.made_by]
+                        del jobs_running[result.made_by]
                         header = f"{_timestamp()} {job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
                             print(f"{header} failed: [{result.error_message}]")
