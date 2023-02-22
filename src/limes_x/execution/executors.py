@@ -49,21 +49,22 @@ class Executor:
     def PrepareRun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
         self._prepare_run(modules, inputs_folder, params)
 
-    def _overload_params(self, job: Job):
+    def _override_params(self, job: Job):
         step = job.instance.step
         params = job.context.params
         if step.threads is not None: params.threads = step.threads
         if step.memory_gb is not None: params.mem_gb = step.memory_gb
         return job
 
-    def _make_job(self, instance: JobInstance, workspace: Path, params: Params, _save=True):
-        job = self._overload_params(Job(
+    def _make_job(self, instance: JobInstance, workspace: Path, params: Params, _save=True, _override=False):
+        job = Job(
             instance = instance,
             workspace = workspace,
             params = params,
             _save = False,
-        ))
-        job.context.Save(workspace=workspace)
+        )
+        if _override: job = self._override_params(job)
+        if _save: job.context.Save(workspace=workspace)
         return job
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
@@ -185,7 +186,7 @@ class HpcExecutor(Executor):
         return permission
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
-        job = self._make_job(instance, workspace, params)
+        job = self._make_job(instance, workspace, params, _override=True)
 
         from ..environments import hpc
         entry_point = Path(os.path.abspath(inspect.getfile(hpc)))
