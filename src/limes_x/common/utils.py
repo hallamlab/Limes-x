@@ -5,6 +5,9 @@ from inspect import signature
 import subprocess
 from threading import Condition, Thread
 from queue import Queue
+import random
+import sqlite3
+from datetime import datetime as dt
 
 def RemoveTrailingSlash(path: str):
     return path[:-1] if path[-1] == '/' else path
@@ -26,6 +29,12 @@ class AutoPopulate:
                 setattr(self, k, kwargs[k])
             else:
                 setattr(self, k, None)
+
+def CurrentTimeMillis():
+    return round(time.time() * 1000)
+
+def Timestamp():
+    return f"{dt.now().strftime('%H:%M:%S')}>"
 
 def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[[str], None]|None=None, echo_cmd: bool=True):
     class _Pipe:
@@ -79,7 +88,96 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
     if code is None: code = 1
     return code
 
-###
+#######################################################################################################
+# https://github.com/dmfrey/FileLock/blob/master/filelock/filelock.py
+# with modification of using sqlite3 to prevent repeated deleting of lock file
+
+import os
+import time
+import errno
+ 
+class FileLockException(Exception):
+    pass
+ 
+class FileLock(object):
+    """ A file locking mechanism that has context-manager support so 
+        you can use it in a with statement. This should be relatively cross
+        compatible as it doesn't rely on msvcrt or fcntl for the locking.
+    """
+ 
+    def __init__(self, file_name, timeout:float=60):
+        """ Prepare the file locker. Specify the file to lock and optionally
+            the maximum timeout and the delay between each attempt to lock.
+        """
+        self.lockfile = os.path.join(os.getcwd(), "%s.lock" % file_name)
+        self.file_name = file_name
+        self.timeout = timeout
+        self.file_handle = None
+ 
+ 
+    def acquire(self):
+        """ Acquire the lock, if possible. If the lock is in use, it check again
+            every `wait` seconds. It does this until it either gets the lock or
+            exceeds `timeout` number of seconds, in which case it throws 
+            an exception.
+        """
+        start_time = time.time()
+        max_delay = self.timeout
+        base_delay = 0.1
+        delay_range = 0.5
+        while True:
+            try:
+                # self.fd = os.open(self.lockfile, os.O_CREAT|os.O_DIRECT|os.O_RDWR)
+                con = sqlite3.connect(self.lockfile, timeout=self.timeout)
+                cur = con.cursor()
+                cur.execute(f"create table if not exists x (id int primary key)")
+                cur.execute(f"delete from x where true")
+                self.file_handle = con
+                break;
+            except sqlite3.OperationalError as e:
+                if self.timeout is None:
+                    raise FileLockException("Could not acquire lock on {}".format(self.file_name))
+                if (time.time() - start_time) >= self.timeout:
+                    raise FileLockException("Timeout occured.")
+                time.sleep((base_delay + delay_range*random.random()))
+                # time.sleep(base_delay)
+            delay_range = min(max_delay, 0.5 + 1.5*base_delay)
+#        self.is_locked = True
+ 
+ 
+    def release(self):
+        """ Get rid of the lock by deleting the lockfile. 
+            When working in a `with` statement, this gets automatically 
+            called at the end.
+        """
+        if self.file_handle is not None:
+            self.file_handle.close()
+            self.file_handle = None
+ 
+ 
+    def __enter__(self):
+        """ Activated when used in the with statement. 
+            Should automatically acquire a lock to be used in the with block.
+        """
+        if self.file_handle is None:
+            self.acquire()
+        return self
+ 
+ 
+    def __exit__(self, type, value, traceback):
+        """ Activated at the end of the with statement.
+            It automatically releases the lock if it isn't locked.
+        """
+        self.release()
+ 
+ 
+    def __del__(self):
+        """ Make sure that the FileLock instance doesn't leave a lockfile
+            lying around.
+        """
+        self.release()
+
+#######################################################################################################
 
 class Overloader:
     """rudimentary, supposedly threadsafe, dispatch-style method overloading

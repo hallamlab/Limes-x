@@ -10,11 +10,12 @@ import signal
 from datetime import datetime as dt
 
 from .execution.solver import DependencySolver
-from .common.utils import PrivateInit
+from .common.utils import PrivateInit, Timestamp
 # from .compute_module import Item, ComputeModule, Params, JobContext, JobResult
 from .execution.instances import JobInstance, ItemInstance
 from .execution.modules import ComputeModule, Item, JobContext, JobResult, Params
 from .execution.executors import Executor
+from .execution.comms import FileSyncedDictionary
 
 class JobError(Exception):
      def __init__(self, message=""):
@@ -259,18 +260,16 @@ class WorkflowState(PrivateInit):
                 self.node = node
                 self.path = path
 
-        seen = set()
         todo: list[Todo] = [Todo(start, [])]
         candidate = []
         while len(todo)>0:
             t = todo.pop()
             curr, path = t.node, t.path
-            seen.add(curr)
             if curr == target and len(path)+1 > len(candidate):
                 candidate = path+[curr] # found one, but want longest
 
             for nnode in self._parent_map.get(curr, set()):
-                if nnode in seen: continue
+                if nnode in path: continue
                 todo.append(Todo(nnode, path+[curr]))
 
         return None if len(candidate) == 0 else candidate
@@ -690,9 +689,6 @@ class Workflow:
         # abs. path before change to working dir
         sys.path = [os.path.abspath(p) for p in sys.path]
 
-        def _timestamp():
-            return f"{dt.now().strftime('%H:%M:%S')}>"
-
         sync = Sync()
         watcher = TerminationWatcher(sync)
         def _run_job_async(jobi: JobInstance, procedure: Callable[[], JobResult]):
@@ -733,6 +729,9 @@ class Workflow:
             state.Update()
             state.Save()
 
+            with FileSyncedDictionary(workspace) as coms:
+                coms.Clear()
+
             if len(state.GetPendingJobs()) == 0:
                 print(f'nothing to do')
                 return
@@ -753,9 +752,8 @@ class Workflow:
 
                     jid = job.GetID()
                     if jid in jobs_ran: continue
-                    header = f"{_timestamp()} {job.step.name}:{jid}"
-                    print(f"{header} started")
-                    _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy(), targets))
+                    print(f"{Timestamp()} queued {job.step.name}:{jid}")
+                    _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy()))
                     jobs_running[jid] = job
                     jobs_ran.add(jid)
 
@@ -766,12 +764,12 @@ class Workflow:
                             raise KeyboardInterrupt()
                         job_instance = jobs_running[result.made_by]
                         del jobs_running[result.made_by]
-                        header = f"{_timestamp()} {job_instance.step.name}:{result.made_by}"
+                        header = f"{job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
-                            print(f"{header} failed: [{result.error_message}]")
+                            print(f"{Timestamp()} failed {header}: [{result.error_message}]")
                             state.RegisterJobComplete(result.made_by, {})
                         else:
-                            print(f"{header} completed")
+                            print(f"{Timestamp()} completed {header}")
                             state.RegisterJobComplete(result.made_by, result.manifest)
                         if result.manifest is not None:
                             for t in targets:
