@@ -73,7 +73,7 @@ if __name__ == '__main__':
             if not os.path.exists(folder): os.makedirs(folder, exist_ok=True)
             _shell(f"""\
                 echo "---- getting input: {p}"
-                cp -r {WORKSPACE.joinpath(p)} {folder}/
+                cp -r -L {WORKSPACE.joinpath(p)} {folder}/
             """, is_child=False)
     _shell('''\
         echo "---- starting workspace:"
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     _shell(f"""\
         echo "---- getting module src"
         mkdir -p {HPC_LIB}/{module_name}
-        cp -r {MODULE_PATH}/{ComputeModule.LIB_FOLDER} {HPC_LIB}/{module_name}
+        cp -r -L {MODULE_PATH}/{ComputeModule.LIB_FOLDER} {HPC_LIB}/{module_name}
         cd {HPC_WS} && ls -lh
     """, is_child=False)
     _shell(f"ls -lh {HPC_LIB}", is_child=False)
