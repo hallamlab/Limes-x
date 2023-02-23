@@ -590,6 +590,25 @@ class InputGroup:
         self.root_value: str|Path = abs_path_if_path(root_value)
         self.children: dict[Item, list[str]|list[Path]] = dict((k, [abs_path_if_path(p) for p in v] if isinstance(v, list) else [abs_path_if_path(v)]) for k, v in children.items())
 
+    def _append_paths(self, paths: list[tuple[str, Path]], inputs_dir: Path):
+        recorded_paths = set()
+        paths_file = inputs_dir.joinpath("paths.tsv")
+        if paths_file.exists():
+            with open(paths_file) as tsv:
+                for l in tsv:
+                    toks = l.split('\t')
+                    if len(toks) != 2: continue
+                    recorded_paths.add(toks[0])
+            
+        new_paths = []
+        for link, path in paths:
+            if link in recorded_paths: continue
+            new_paths.append((link, str(path)))
+        
+        with open(paths_file, 'a') as tsv:
+            TAB = '\t'
+            tsv.writelines([f"{TAB.join(t)}\n" for t in new_paths])
+
     def LinkInputs(self, workspace: Path):
         here = os.getcwd()
         os.chdir(workspace)

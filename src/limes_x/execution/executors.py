@@ -49,6 +49,9 @@ class Executor:
     def PrepareRun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
         self._prepare_run(modules, inputs_folder, params)
 
+    def _print_start(self, job: Job):
+        print(f"{Timestamp()}    - started {job.instance.step.name}:{job.instance.GetID()}")
+
     def _override_params(self, job: Job):
         step = job.instance.step
         params = job.context.params
@@ -79,6 +82,7 @@ class Executor:
             PYTHONPATH={':'.join(os.path.abspath(p) for p in sys.path)}
             python {" ".join(f'"{a}"' for a in args)}
         """[:-1].replace("  ", "")
+        self._print_start(job)
         success, msg = self._execute_procedure(job)
 
         return self._compile_result(job, success, msg)
@@ -206,6 +210,7 @@ class HpcExecutor(Executor):
                 if self._can_run(workspace, me): break
                 time.sleep(self.update_frequency)
             # print(f"- started {job.context.job_id}")
+            self._print_start(job)
             success, msg = self._hpc_procedure(job)
         except Exception as e:
             success, msg = False, str(e)
