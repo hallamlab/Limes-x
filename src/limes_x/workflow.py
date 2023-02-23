@@ -590,7 +590,7 @@ class InputGroup:
         self.root_value: str|Path = abs_path_if_path(root_value)
         self.children: dict[Item, list[str]|list[Path]] = dict((k, [abs_path_if_path(p) for p in v] if isinstance(v, list) else [abs_path_if_path(v)]) for k, v in children.items())
 
-    def _append_paths(self, paths: list[tuple[str, Path]], inputs_dir: Path):
+    def _record_input_paths(self, links: list[tuple[str, Path]], inputs_dir: Path):
         recorded_paths = set()
         paths_file = inputs_dir.joinpath("paths.tsv")
         if paths_file.exists():
@@ -601,7 +601,7 @@ class InputGroup:
                     recorded_paths.add(toks[0])
             
         new_paths = []
-        for link, path in paths:
+        for link, path in links:
             if link in recorded_paths: continue
             new_paths.append((link, str(path)))
         
@@ -614,11 +614,14 @@ class InputGroup:
         os.chdir(workspace)
         input_dir = Path(Workflow.INPUT_DIR)
         
+        links = []
         def _fix(item, path):
             assert os.path.exists(path), f"given [{path}] doesn't exist"
             InputGroup.input_index+=1
-            linked = input_dir.joinpath(f"{InputGroup.input_index:04}--{path.name}")
+            link_name = f"{InputGroup.input_index:04}--{path.name}"
+            linked = input_dir.joinpath(link_name)
             os.symlink(path, linked)
+            links.append((link_name, path))
             return linked
 
         if isinstance(self.root_value, Path):
@@ -633,6 +636,7 @@ class InputGroup:
                 linked = _fix(item, p)
                 parsed.append(linked)
             self.children[item] = parsed
+        self._record_input_paths(links, workspace)
         os.chdir(here)
     
     def ListItems(self):

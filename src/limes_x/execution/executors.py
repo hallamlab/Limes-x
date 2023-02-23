@@ -51,6 +51,7 @@ class Executor:
 
     def _print_start(self, job: Job):
         print(f"{Timestamp()}    - started {job.instance.step.name}:{job.instance.GetID()}")
+        sys.stdout.flush()
 
     def _override_params(self, job: Job):
         step = job.instance.step
