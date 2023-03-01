@@ -45,7 +45,7 @@ if __name__ == '__main__':
         line = f'{_timestamp()} {s}'
         if not is_child: log.append(line)
         with open(realtime_log, 'a') as f:
-            f.write(line+NEWLINE) if not is_child else f.write(s+'\n')
+            if not is_child: f.write(line+NEWLINE)
 
     def _shell(cmd: str, is_child: bool):
         cmd = cmd.replace("  ", "")
