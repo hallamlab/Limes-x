@@ -100,7 +100,7 @@ if __name__ == '__main__':
         """, is_child=False)
     _shell(f"ls -lh {HPC_REF}", is_child=False)
     CONTEXT.params.reference_folder = HPC_REF
-    CONTEXT.lib = HPC_LIB
+    CONTEXT.ref = HPC_LIB
     CONTEXT.Save(HPC_WS)
 
     # remove myself from list of io jobs

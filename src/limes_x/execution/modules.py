@@ -96,14 +96,14 @@ def _dict2manifest(d: dict[str, dict]):
 
 class JobContext(AutoPopulate):
     __FILE_NAME = 'context.json'
-    __BL = {'shell', 'output_folder', 'lib'}
+    __BL = {'shell', 'output_folder', 'ref'}
     shell_prefix: str
     params: Params
     shell: Callable[[str], int]
     output_folder: Path
     manifest: dict[Item, str|Path|list[str|Path]]
     job_id: str
-    lib: Path
+    ref: Path
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -144,7 +144,7 @@ class JobContext(AutoPopulate):
                     'params': lambda: Params.FromDict(v),
                     'manifest': lambda: _dict2manifest(v),
                     'output_folder': lambda: Path(v),
-                    'lib': lambda: Path(v),
+                    'ref': lambda: Path(v),
                 }.get(k, lambda: str(v))()
                 kwargs[k] = v
             if 'output_folder' not in d:
