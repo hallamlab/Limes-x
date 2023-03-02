@@ -170,7 +170,7 @@ class HpcExecutor(Executor):
         self._num_active_io: int = 0
         self._last_check: int = 0
 
-    def _can_run(self, workspace: Path, key: str):
+    def _can_run(self, workspace: Path, key: str, force_update: bool=False):
         elapsed = CurrentTimeMillis() - self._last_check
 
         def _update():
@@ -184,7 +184,7 @@ class HpcExecutor(Executor):
             return perm
 
         permission = False
-        if elapsed >= self.update_frequency or self._num_active_io < self.max_active_io_jobs:
+        if force_update or elapsed >= self.update_frequency or self._num_active_io < self.max_active_io_jobs:
             permission = _update()
 
         self._last_check = CurrentTimeMillis()
@@ -207,9 +207,9 @@ class HpcExecutor(Executor):
         success, msg = False, ""
         try:
             me = job.context.job_id
-            while True:
-                if self._can_run(workspace, me): break
-                time.sleep(self.update_frequency)
+            if not self._can_run(workspace, me, force_update=True):
+                while not self._can_run(workspace, me):
+                    time.sleep(self.update_frequency)
             # print(f"- started {job.context.job_id}")
             self._print_start(job)
             success, msg = self._hpc_procedure(job)
