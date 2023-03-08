@@ -592,7 +592,7 @@ class InputGroup:
 
     def _record_input_paths(self, links: list[tuple[str, Path]], inputs_dir: Path):
         recorded_paths = set()
-        paths_file = inputs_dir.joinpath("paths.tsv")
+        paths_file = inputs_dir.joinpath("input_paths.tsv")
         if paths_file.exists():
             with open(paths_file) as tsv:
                 for l in tsv:
