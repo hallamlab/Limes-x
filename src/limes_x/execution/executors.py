@@ -169,6 +169,7 @@ class HpcExecutor(Executor):
         self.update_frequency: int = 5
         self._num_active_io: int = 0
         self._last_check: int = 0
+        self._first_run = True
 
     def _can_run(self, workspace: Path, key: str, force_update: bool=False):
         elapsed = CurrentTimeMillis() - self._last_check
@@ -176,6 +177,9 @@ class HpcExecutor(Executor):
         def _update():
             perm = False
             with FileSyncedDictionary(workspace) as com:
+                if self._first_run:
+                    com.Clear()
+                    self._first_run = False
                 if len(com.GetIoTasks()) < self.max_active_io_jobs:
                     com.QueueIoTask(key)
                     com.SwitchIoTaskToActive(key)
