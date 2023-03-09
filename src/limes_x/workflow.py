@@ -395,13 +395,14 @@ class WorkflowState(PrivateInit):
                 return [ns._space for ns in self.namespaces]
 
         def _gather_inputs(module: ComputeModule):
-            input_groups: dict[str, list[ItemInstance]|dict[ItemInstance, list[ItemInstance]]] = {}
+            input_groups: dict[str, dict[ItemInstance, list[ItemInstance]]] = {}
             for input in module.inputs:
                 group_by = module.Grouped(input)
                 if group_by is None:
                     instances = self._item_lookup.get(input.key)
                     if instances is None: return None
-                    input_groups[input.key] = instances
+                    self_group = dict((i, [i]) for i in instances)
+                    input_groups[input.key] = self_group
                 else:
                     group = self._group_by(input.key, group_by.key)
                     if len(group)==0: return None
@@ -409,17 +410,14 @@ class WorkflowState(PrivateInit):
 
             input_namespaces = Namespaces()
             seen_roots = set() # item names
-            for item_name, dict_or_list in input_groups.items():
-                if isinstance(dict_or_list, list):
-                    input_namespaces.CrossGroup(dict((ii, [ii]) for ii in dict_or_list))
-                    seen_roots.add(dict_or_list[0].item_name)
-                else: # is dict
-                    root = next(iter(dict_or_list)).item_name
-                    if root in seen_roots:
-                        input_namespaces.MergeGroup(dict_or_list)
-                    else:
-                        input_namespaces.CrossGroup(dict_or_list)
-                        seen_roots.add(root)
+            # print(input_groups)
+            for item_name, group in input_groups.items():
+                root = next(iter(group)).item_name
+                if root in seen_roots:
+                    input_namespaces.MergeGroup(group)
+                else:
+                    input_namespaces.CrossGroup(group)
+                    seen_roots.add(root)
 
             return input_namespaces.Compile()
 
@@ -433,6 +431,7 @@ class WorkflowState(PrivateInit):
             if not _satisfies(module): continue
             instances = _gather_inputs(module)
             if instances is None: continue
+            print(f"{module.name} {len(instances)}")
             for space in instances:
                 signature = self._get_signature(list(space.values()))
                 if signature in self._job_signatures: continue
