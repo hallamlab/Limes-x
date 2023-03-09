@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 import inspect
 import random
+from threading import Condition
 
 from .modules import ComputeModule, JobContext, JobResult, Params, Item
 from .instances import JobInstance
@@ -45,13 +46,15 @@ class Executor:
     def __init__(self, execute_procedure: ExecutionHandler|None=None, prepare_procedure: SetupHandler|None=None) -> None:
         self._execute_procedure: ExecutionHandler = execute_procedure if execute_procedure is not None else lambda j: j.Shell(j.run_command)
         self._prepare_run = (lambda x, y, z: None) if prepare_procedure is None else prepare_procedure
+        self._sync = Condition()
 
     def PrepareRun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
         self._prepare_run(modules, inputs_folder, params)
 
     def _print_start(self, job: Job):
-        print(f"{Timestamp()}    - started {job.instance.step.name}:{job.instance.GetID()}")
-        sys.stdout.flush()
+        with self._sync:
+            print(f"{Timestamp()}    - started {job.instance.step.name}:{job.instance.GetID()}")
+            sys.stdout.flush()
 
     def _override_params(self, job: Job):
         step = job.instance.step

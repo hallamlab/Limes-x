@@ -183,6 +183,8 @@ class WorkflowState(PrivateInit):
                 lst = state._item_lookup.get(ii.item_name, [])
                 lst.append(ii)
                 state._item_lookup[ii.item_name] = lst
+
+            state.Update()
             return state
 
     @classmethod
@@ -686,8 +688,7 @@ class Workflow:
         if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
         prefix = f"{job_instance.step.name}--{job_instance.GetID()}"
         for p in _values: # paths should be relative to ws
-            if not p.exists(): continue
-            if isinstance(p, Path):
+            if isinstance(p, Path) and p.exists():
                 original = Path(f"../{p}")
                 toks = str(p).split('/')
                 fname = toks[-1]
@@ -712,8 +713,8 @@ class Workflow:
         # abs. path before change to working dir
         sys.path = [os.path.abspath(p) for p in sys.path]
 
-        sync = Sync()
-        watcher = TerminationWatcher(sync)
+        result_sync = Sync()
+        watcher = TerminationWatcher(result_sync)
         def _run_job_async(jobi: JobInstance, procedure: Callable[[], JobResult]):
             def _job():
                 try:
@@ -724,7 +725,7 @@ class Workflow:
                         error_message = str(e),
                         made_by = jobi.GetID(),
                     )
-                sync.PushNotify(result)
+                result_sync.PushNotify(result)
         
             th = Thread(target=_job, daemon=True)
             th.start()
@@ -762,6 +763,10 @@ class Workflow:
             executor.PrepareRun(steps, self.INPUT_DIR, params)
             print(f">>> start")
 
+            def sprint(x):
+                with executor._sync:
+                    print(x)
+
             jobs_ran = set() # this may be redundant
             jobs_running: dict[str, JobInstance] = {}
             while not watcher.kill_now:
@@ -775,24 +780,24 @@ class Workflow:
 
                     jid = job.GetID()
                     if jid in jobs_ran: continue
-                    print(f"{Timestamp()} queued {job.step.name}:{jid}")
+                    sprint(f"{Timestamp()} queued {job.step.name}:{jid}")
                     _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy()))
                     jobs_running[jid] = job
                     jobs_ran.add(jid)
 
                 sys.stdout.flush()
                 try:
-                    for result in sync.WaitAll():
+                    for result in result_sync.WaitAll():
                         if result is None:
                             raise KeyboardInterrupt()
                         job_instance = jobs_running[result.made_by]
                         del jobs_running[result.made_by]
                         header = f"{job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
-                            print(f"{Timestamp()} failed {header}: [{result.error_message}]")
+                            sprint(f"{Timestamp()} failed {header}: [{result.error_message}]")
                             state.RegisterJobComplete(result.made_by, {})
                         else:
-                            print(f"{Timestamp()} completed {header}")
+                            sprint(f"{Timestamp()} completed {header}")
                             state.RegisterJobComplete(result.made_by, result.manifest)
                         if result.manifest is not None:
                             for t in targets:
