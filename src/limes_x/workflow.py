@@ -431,7 +431,7 @@ class WorkflowState(PrivateInit):
             if not _satisfies(module): continue
             instances = _gather_inputs(module)
             if instances is None: continue
-            print(f"{module.name} {len(instances)}")
+            # print(f"{module.name} {len(instances)}")
             for space in instances:
                 signature = self._get_signature(list(space.values()))
                 if signature in self._job_signatures: continue
