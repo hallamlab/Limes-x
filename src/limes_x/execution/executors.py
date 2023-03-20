@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 import inspect
 import random
+from threading import Condition
 
 from .modules import ComputeModule, JobContext, JobResult, Params, Item
 from .instances import JobInstance
@@ -45,13 +46,15 @@ class Executor:
     def __init__(self, execute_procedure: ExecutionHandler|None=None, prepare_procedure: SetupHandler|None=None) -> None:
         self._execute_procedure: ExecutionHandler = execute_procedure if execute_procedure is not None else lambda j: j.Shell(j.run_command)
         self._prepare_run = (lambda x, y, z: None) if prepare_procedure is None else prepare_procedure
+        self._sync = Condition()
 
     def PrepareRun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
         self._prepare_run(modules, inputs_folder, params)
 
     def _print_start(self, job: Job):
-        print(f"{Timestamp()}    - started {job.instance.step.name}:{job.instance.GetID()}")
-        sys.stdout.flush()
+        with self._sync:
+            print(f"{Timestamp()}    - started {job.instance.step.name}:{job.instance.GetID()}")
+            sys.stdout.flush()
 
     def _override_params(self, job: Job):
         step = job.instance.step
@@ -169,6 +172,7 @@ class HpcExecutor(Executor):
         self.update_frequency: int = 5
         self._num_active_io: int = 0
         self._last_check: int = 0
+        self._first_run = True
 
     def _can_run(self, workspace: Path, key: str, force_update: bool=False):
         elapsed = (CurrentTimeMillis() - self._last_check)/1000.0
@@ -176,6 +180,9 @@ class HpcExecutor(Executor):
         def _update():
             perm = False
             with FileSyncedDictionary(workspace) as com:
+                if self._first_run:
+                    com.Clear()
+                    self._first_run = False
                 if len(com.GetIoTasks()) < self.max_active_io_jobs:
                     com.QueueIoTask(key)
                     com.SwitchIoTaskToActive(key)

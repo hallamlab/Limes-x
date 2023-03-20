@@ -183,6 +183,8 @@ class WorkflowState(PrivateInit):
                 lst = state._item_lookup.get(ii.item_name, [])
                 lst.append(ii)
                 state._item_lookup[ii.item_name] = lst
+
+            state.Update()
             return state
 
     @classmethod
@@ -393,13 +395,14 @@ class WorkflowState(PrivateInit):
                 return [ns._space for ns in self.namespaces]
 
         def _gather_inputs(module: ComputeModule):
-            input_groups: dict[str, list[ItemInstance]|dict[ItemInstance, list[ItemInstance]]] = {}
+            input_groups: dict[str, dict[ItemInstance, list[ItemInstance]]] = {}
             for input in module.inputs:
                 group_by = module.Grouped(input)
                 if group_by is None:
                     instances = self._item_lookup.get(input.key)
                     if instances is None: return None
-                    input_groups[input.key] = instances
+                    self_group = dict((i, [i]) for i in instances)
+                    input_groups[input.key] = self_group
                 else:
                     group = self._group_by(input.key, group_by.key)
                     if len(group)==0: return None
@@ -407,17 +410,14 @@ class WorkflowState(PrivateInit):
 
             input_namespaces = Namespaces()
             seen_roots = set() # item names
-            for item_name, dict_or_list in input_groups.items():
-                if isinstance(dict_or_list, list):
-                    input_namespaces.CrossGroup(dict((ii, [ii]) for ii in dict_or_list))
-                    seen_roots.add(dict_or_list[0].item_name)
-                else: # is dict
-                    root = next(iter(dict_or_list)).item_name
-                    if root in seen_roots:
-                        input_namespaces.MergeGroup(dict_or_list)
-                    else:
-                        input_namespaces.CrossGroup(dict_or_list)
-                        seen_roots.add(root)
+            # print(input_groups)
+            for item_name, group in input_groups.items():
+                root = next(iter(group)).item_name
+                if root in seen_roots:
+                    input_namespaces.MergeGroup(group)
+                else:
+                    input_namespaces.CrossGroup(group)
+                    seen_roots.add(root)
 
             return input_namespaces.Compile()
 
@@ -431,6 +431,7 @@ class WorkflowState(PrivateInit):
             if not _satisfies(module): continue
             instances = _gather_inputs(module)
             if instances is None: continue
+            # print(f"{module.name} {len(instances)}")
             for space in instances:
                 signature = self._get_signature(list(space.values()))
                 if signature in self._job_signatures: continue
@@ -592,7 +593,7 @@ class InputGroup:
 
     def _record_input_paths(self, links: list[tuple[str, Path]], inputs_dir: Path):
         recorded_paths = set()
-        paths_file = inputs_dir.joinpath("paths.tsv")
+        paths_file = inputs_dir.joinpath("input_paths.tsv")
         if paths_file.exists():
             with open(paths_file) as tsv:
                 for l in tsv:
@@ -686,8 +687,7 @@ class Workflow:
         if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
         prefix = f"{job_instance.step.name}--{job_instance.GetID()}"
         for p in _values: # paths should be relative to ws
-            if not p.exists(): continue
-            if isinstance(p, Path):
+            if isinstance(p, Path) and p.exists():
                 original = Path(f"../{p}")
                 toks = str(p).split('/')
                 fname = toks[-1]
@@ -712,8 +712,8 @@ class Workflow:
         # abs. path before change to working dir
         sys.path = [os.path.abspath(p) for p in sys.path]
 
-        sync = Sync()
-        watcher = TerminationWatcher(sync)
+        result_sync = Sync()
+        watcher = TerminationWatcher(result_sync)
         def _run_job_async(jobi: JobInstance, procedure: Callable[[], JobResult]):
             def _job():
                 try:
@@ -724,7 +724,7 @@ class Workflow:
                         error_message = str(e),
                         made_by = jobi.GetID(),
                     )
-                sync.PushNotify(result)
+                result_sync.PushNotify(result)
         
             th = Thread(target=_job, daemon=True)
             th.start()
@@ -762,6 +762,10 @@ class Workflow:
             executor.PrepareRun(steps, self.INPUT_DIR, params)
             print(f">>> start")
 
+            def sprint(x):
+                with executor._sync:
+                    print(x)
+
             jobs_ran = set() # this may be redundant
             jobs_running: dict[str, JobInstance] = {}
             while not watcher.kill_now:
@@ -775,24 +779,24 @@ class Workflow:
 
                     jid = job.GetID()
                     if jid in jobs_ran: continue
-                    print(f"{Timestamp()} queued {job.step.name}:{jid}")
+                    sprint(f"{Timestamp()} queued {job.step.name}:{jid}")
                     _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy()))
                     jobs_running[jid] = job
                     jobs_ran.add(jid)
 
                 sys.stdout.flush()
                 try:
-                    for result in sync.WaitAll():
+                    for result in result_sync.WaitAll():
                         if result is None:
                             raise KeyboardInterrupt()
                         job_instance = jobs_running[result.made_by]
                         del jobs_running[result.made_by]
                         header = f"{job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
-                            print(f"{Timestamp()} failed {header}: [{result.error_message}]")
+                            sprint(f"{Timestamp()} failed {header}: [{result.error_message}]")
                             state.RegisterJobComplete(result.made_by, {})
                         else:
-                            print(f"{Timestamp()} completed {header}")
+                            sprint(f"{Timestamp()} completed {header}")
                             state.RegisterJobComplete(result.made_by, result.manifest)
                         if result.manifest is not None:
                             for t in targets:
