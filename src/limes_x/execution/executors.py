@@ -171,7 +171,7 @@ class HpcExecutor(Executor):
         self._last_check: int = 0
 
     def _can_run(self, workspace: Path, key: str, force_update: bool=False):
-        elapsed = CurrentTimeMillis() - self._last_check
+        elapsed = (CurrentTimeMillis() - self._last_check)/1000.0
 
         def _update():
             perm = False
