@@ -169,13 +169,14 @@ class HpcExecutor(Executor):
         self._hpc_procedure = hpc_procedure
         self._tmp_dir_name = tmp_dir_name
         self.max_active_io_jobs: int = 5
-        self.update_frequency: int = 5
+        self.update_frequency: int|float = 5
         self._num_active_io: int = 0
         self._last_check: int = 0
         self._first_run = True
 
     def _can_run(self, workspace: Path, key: str, force_update: bool=False):
         elapsed = (CurrentTimeMillis() - self._last_check)/1000.0
+        print(elapsed, self.update_frequency)
 
         def _update():
             perm = False
@@ -193,8 +194,7 @@ class HpcExecutor(Executor):
         permission = False
         if force_update or elapsed >= self.update_frequency or self._num_active_io < self.max_active_io_jobs:
             permission = _update()
-
-        self._last_check = CurrentTimeMillis()
+            self._last_check = CurrentTimeMillis()
         return permission
 
     def Run(self, instance: JobInstance, workspace: Path, params: Params) -> JobResult:
@@ -223,6 +223,7 @@ class HpcExecutor(Executor):
         except Exception as e:
             success, msg = False, str(e)
             print(f"ERROR: in executor: {e}")
+            sys.stdout.flush()
         except KeyboardInterrupt:
             success, msg = False, "force stopped"
             print(f"force stopped")
