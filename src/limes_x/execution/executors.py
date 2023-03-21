@@ -176,8 +176,6 @@ class HpcExecutor(Executor):
 
     def _can_run(self, workspace: Path, key: str, force_update: bool=False):
         elapsed = (CurrentTimeMillis() - self._last_check)/1000.0
-        print(elapsed, self.update_frequency)
-
         def _update():
             perm = False
             with FileSyncedDictionary(workspace) as com:
