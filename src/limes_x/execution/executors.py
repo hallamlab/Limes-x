@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import Callable, Iterable
 import inspect
-import random
 from threading import Condition
 
 from .modules import ComputeModule, JobContext, JobResult, Params, Item
@@ -48,6 +47,7 @@ class Executor:
         self._prepare_run = (lambda x, y, z: None) if prepare_procedure is None else prepare_procedure
         self._sync = Condition()
 
+    # currently not used
     def PrepareRun(self, modules: list[ComputeModule], inputs_folder: Path, params: Params):
         self._prepare_run(modules, inputs_folder, params)
 

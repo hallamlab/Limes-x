@@ -468,37 +468,10 @@ class WorkflowState(PrivateInit):
             outs[item.key] = insts if len(insts)>1 else insts[0]
         job_inst.MarkAsComplete(outs)
 
-    def Invalidate(self, items: Iterable[Item]):
-        old_save = self._workspace.joinpath(self._FILE_NAME)
-        if not old_save.exists():
-            print("invalidate did nothing since this is the first run")
-            return
+    def _invalidate(self, job_instances_to_delete: Iterable[JobInstance]):
         self._changed = True
 
-        # get steps and items to delete
-        steps_to_delete: list[ComputeModule] = []
-        for step in self._steps:
-            if not any(o in items for o in step.outputs): continue
-            steps_to_delete.append(step)
-        todo = [s.name for s in steps_to_delete]
-        names_to_delete = set()
-        while len(todo)>0:
-            curr = todo.pop()
-            if curr in names_to_delete: continue
-            names_to_delete.add(curr)
-            todo += [c for c in self._parent_map.get(curr, [])]
-
-        # get instances of each item and step
-        given_item_instances = set(self._given_item_instances)
         item_instances_to_delete: list[ItemInstance] = []
-        job_instances_to_delete: list[JobInstance] = []
-        for k in names_to_delete:
-            if k not in self._item_lookup: continue
-            item_instances_to_delete += self._item_lookup[k]
-        for ji in self._job_instances.values():
-            if ji.step in steps_to_delete:
-                job_instances_to_delete.append(ji) 
-
         # remove job instances
         for ji in job_instances_to_delete:
             jk = ji.GetID()
@@ -506,11 +479,13 @@ class WorkflowState(PrivateInit):
             if jk in self._pending_jobs: del self._pending_jobs[jk]
             sig = self._get_signature(list(ji.inputs.values()))
             if sig in self._job_signatures: del self._job_signatures[sig]
+            outs = ji.ListOutputInstances()
+            if outs is not None: item_instances_to_delete += outs
 
         # remove item instances
         for ii in item_instances_to_delete:
-            if ii in given_item_instances: continue
-            if ii.GetID() in given_item_instances: return
+            if ii in self._given_item_instances: continue
+            if ii.GetID() in self._given_item_instances: return
             if ii.item_name in self._item_lookup: del self._item_lookup[ii.item_name]
             if ii in self._item_instance_reservations:
                 del self._item_instance_reservations[ii]
@@ -534,12 +509,67 @@ class WorkflowState(PrivateInit):
         
         deleted_jobs_folders = [ji.GetFolderName() for ji in job_instances_to_delete]
         NL = '\n'
+
+        old_save = self._get_save()
         cmd = f"""\
             mkdir -p {previous_folder}
             {NL.join(f"mv {self._workspace.joinpath(f)} {previous_folder.joinpath(f)}" for f in deleted_jobs_folders)}
             mv {old_save} {previous_folder}
         """
         os.system(cmd)
+
+    def _get_save(self):
+        return self._workspace.joinpath(self._FILE_NAME)
+
+    def _check_can_invalidate(self):
+        old_save = self._get_save()
+        if not old_save.exists():
+            print("invalidate did nothing since this is the first run")
+            return False
+        return True
+
+    def Invalidate(self, items: Iterable[Item]):
+        if not self._check_can_invalidate(): return
+
+        # get steps and items to delete
+        steps_to_delete: list[ComputeModule] = []
+        for step in self._steps:
+            if not any(o in items for o in step.outputs): continue
+            steps_to_delete.append(step)
+        todo = [s.name for s in steps_to_delete]
+        names_to_delete = set()
+        while len(todo)>0:
+            curr = todo.pop()
+            if curr in names_to_delete: continue
+            names_to_delete.add(curr)
+            todo += [c for c in self._parent_map.get(curr, [])]
+
+        # get instances of each item and step
+        item_instances_to_delete: list[ItemInstance] = []
+        for k in names_to_delete:
+            if k not in self._item_lookup: continue
+            item_instances_to_delete += self._item_lookup[k]
+
+        # get job instances from item instances
+        job_instances_to_delete: set[JobInstance] = set()
+        for ii in item_instances_to_delete:
+            ji = ii.made_by
+            if ji is None or not isinstance(ji, JobInstance): continue
+            job_instances_to_delete.add(ji)
+
+        self._invalidate(job_instances_to_delete)
+
+    def InvalidateFails(self):
+        if not self._check_can_invalidate(): return
+
+        to_delete: list[JobInstance] = []
+        for ji in self._job_instances.values():
+            if not ji.complete: continue
+            outs = ji.outputs
+            if outs is None or len(outs)==0:
+                to_delete.append(ji)
+                
+        self._invalidate(to_delete)
 
 class Sync:
     def __init__(self) -> None:
@@ -732,10 +762,16 @@ class Workflow:
         def _run():
             # make links for inputs in workspace
             inputs_dir = Workflow.INPUT_DIR
-            if os.path.exists(inputs_dir): shutil.rmtree(inputs_dir)
-            os.makedirs(inputs_dir)
-            for g in given:
-                g.LinkInputs(workspace=workspace)
+            # --------------------------------------------
+            # !!! todo: major rework of continuation mechanic required; this block is fragile
+            # all paramaters to this fn except for workspace and executor needs to be saved in state
+            # extract _run() to class
+            # split this into 2 public functions, 1 for first run, 1 for continue with invalidate options
+            if not os.path.exists(inputs_dir):
+                os.makedirs(inputs_dir)
+                for g in given:
+                    g.LinkInputs(workspace=workspace)
+            # --------------------------------------------
             inputs = [i for g in [g.ListItems() for g in given] for i in g]
             _steps, dep_map = self._calculate(inputs, targets)
             if _steps is False:
