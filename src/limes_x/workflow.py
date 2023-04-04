@@ -2,7 +2,7 @@ from __future__ import annotations
 import os, sys
 import shutil
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 import json
 import uuid
 from threading import Thread, Condition
@@ -730,7 +730,7 @@ class Workflow:
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: list[InputGroup],
         executor: Executor, params: Params=Params(),
-        regenerate: list[Item]=list(),
+        regenerate: Literal["failures"]|list[Item]=list(),
         max_concurrent: int = 256,
         _catch_errors: bool = True,
     ):
@@ -781,7 +781,9 @@ class Workflow:
             print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
             self._check_feasible(steps, targets, dep_map)
             state = WorkflowState.ResumeIfPossible('./', steps, given)
-            if len(regenerate)>0:
+            if regenerate == "failures":
+                state.InvalidateFails()
+            elif len(regenerate)>0:
                 print(f'will regenerate [{", ".join([r.key for r in regenerate])}] and downstream dependents')
                 state.Invalidate(regenerate)
 
