@@ -767,6 +767,7 @@ class Workflow:
             # all paramaters to this fn except for workspace and executor needs to be saved in state
             # extract _run() to class
             # split this into 2 public functions, 1 for first run, 1 for continue with invalidate options
+            # invalidate also doesn't recursively find all failed instances and children* to delete
             if not os.path.exists(inputs_dir):
                 os.makedirs(inputs_dir)
                 for g in given:
