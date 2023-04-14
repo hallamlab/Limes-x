@@ -715,16 +715,22 @@ class Workflow:
         _values: Any = values
         if not isinstance(values, list): _values = [values]
         if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
-        prefix = f"{job_instance.step.name}--{job_instance.GetID()}"
+        def _ok_for_path(c: str):
+            return c.isalpha() or c.isdigit() or c in "-_()[]+=:.?"
+        job_name = "".join([c if _ok_for_path(c) else "_" for c in job_instance.step.name]).rstrip()
+        output_dir_for_target_item = self.OUTPUT_DIR.joinpath(job_name)
+        if not output_dir_for_target_item.exists(): os.makedirs(output_dir_for_target_item)
+
+        prefix = f"{job_instance.GetID()}"
         for p in _values: # paths should be relative to ws
             if isinstance(p, Path) and p.exists():
-                original = Path(f"../{p}")
+                original = Path(f"../../{p}")
                 toks = str(p).split('/')
                 fname = toks[-1]
                 link = f"{prefix}.{fname}"
-                os.symlink(original, self.OUTPUT_DIR.joinpath(link))
+                os.symlink(original, output_dir_for_target_item.joinpath(link))
             else:
-                with open(self.OUTPUT_DIR.joinpath(f"{prefix}.{target.key}.txt"), 'a') as out:
+                with open(output_dir_for_target_item.joinpath(f"{prefix}.{target.key}.txt"), 'a') as out:
                     out.write(f"{p}\n")
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
