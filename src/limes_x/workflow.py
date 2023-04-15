@@ -271,7 +271,7 @@ class WorkflowState(PrivateInit):
                 candidate = path+[curr] # found one, but want longest
 
             for nnode in self._parent_map.get(curr, set()):
-                if nnode in path: continue
+                if curr == nnode or nnode in path: continue
                 todo.append(Todo(nnode, path+[curr]))
 
         return None if len(candidate) == 0 else candidate
@@ -294,13 +294,13 @@ class WorkflowState(PrivateInit):
                     self.node = node
                     self.depth = depth
 
-            group: list[ItemInstance] = []
+            group: set[ItemInstance] = set()
             todo = [Todo(start, 0)]
             while len(todo)>0:
                 t = todo.pop(0)
                 instance, depth = t.node, t.depth
                 if isinstance(instance, ItemInstance) and instance.item_name == target:
-                    group.append(instance)
+                    group.add(instance)
                     continue # found leaf (target) of @start
 
                 next_name = path[depth+1]
@@ -321,7 +321,7 @@ class WorkflowState(PrivateInit):
                     for i in outs:
                         if i.item_name != next_name: continue
                         todo.append(Todo(i, depth+1))
-            return group
+            return list(group)
 
         groups: dict[ItemInstance, list[ItemInstance]] = {}
         for s in starting_points:
@@ -687,6 +687,7 @@ class Workflow:
         else:
             assert os.path.isdir(self._reference_folder), f"reference folder path exists, but is not a folder: {self._reference_folder}"
         self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
+        self._all_modules = compute_modules
 
     def Setup(self, install_type: str):
         for step in self._compute_modules:
@@ -698,18 +699,14 @@ class Workflow:
         steps, dep_map = self._solver.Solve(given_k, targets_k)
         return steps, dep_map
 
-    def _check_feasible(self, steps: list[ComputeModule], targets: Iterable[Item], dep_map: dict[str, list[ComputeModule]]):
+    def _check_feasible(self, targets: Iterable[Item]):
+        steps = self._all_modules
         targets = set(targets)
         products = set()
         for cm in steps:
             products = products.union(cm.outputs)
         missing = targets - products
         assert missing == set(), f"no module produces these items [{', '.join(str(i) for i in missing)}]"
-
-        for cm in steps:
-            deps = dep_map[cm.name]
-            for i, g in cm._group_by.items():
-                assert any(g in pre.inputs for pre in deps), f"invalid grouping: [{g.key}] is not upstream of [{i.key}] for module [{cm.name}]"
 
     def _link_output(self, job_instance: JobInstance, target: Item, values: str|Path|list[str]|list[Path]):
         _values: Any = values
@@ -738,6 +735,7 @@ class Workflow:
         executor: Executor, params: Params=Params(),
         regenerate: Literal["failures"]|list[Item]=list(),
         max_concurrent: int = 256,
+        max_per_module: dict[str, int] = dict(),
         _catch_errors: bool = True,
     ):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
@@ -779,14 +777,26 @@ class Workflow:
                 for g in given:
                     g.LinkInputs(workspace=workspace)
             # --------------------------------------------
-            inputs = [i for g in [g.ListItems() for g in given] for i in g]
-            _steps, dep_map = self._calculate(inputs, targets)
-            if _steps is False:
-                print(f'no solution exists')
-                return
-            steps: list[ComputeModule] = [s.reference for s in _steps]
+
+            self._check_feasible(targets)
+            _steps = []
+            # look at scratch/cloud_compute/test_deep_grouping.ipynb
+            # fails when one input group is "ahead" of the rest 
+            dep_map = {}
+            for i, ig in enumerate(given):
+                _ig_steps, _dep_map = self._calculate(ig.ListItems(), targets)
+                dep_map.update(_dep_map)
+                if _ig_steps is False:
+                    print(f'no solution exists for input group {i+1}')
+                    return
+                _steps += _ig_steps
+            _unique_steps = {}
+            for s in _steps:
+                c: ComputeModule = s.reference
+                if c.name in _unique_steps: continue
+                _unique_steps[c.name] = c
+            steps: list[ComputeModule] = [s for s in _unique_steps.values()]
             print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
-            self._check_feasible(steps, targets, dep_map)
             state = WorkflowState.ResumeIfPossible('./', steps, given)
             if regenerate == "failures":
                 state.InvalidateFails()
@@ -813,6 +823,7 @@ class Workflow:
 
             jobs_ran = set() # this may be redundant
             jobs_running: dict[str, JobInstance] = {}
+            running_per_module: dict[str, int] = {}
             while not watcher.kill_now:
                 pending_jobs = state.GetPendingJobs()
                 if len(pending_jobs) == 0: break
@@ -821,9 +832,16 @@ class Workflow:
                     if watcher.kill_now:
                         raise KeyboardInterrupt()
                     if len(jobs_running) >= max_concurrent: break
-
                     jid = job.GetID()
                     if jid in jobs_ran: continue
+
+                    module_name = job.step.name
+                    if module_name in max_per_module:
+                        max_for_this_module = max_per_module[module_name]
+                        current_for_this_module = running_per_module.get(module_name, 0)
+                        if current_for_this_module >= max_for_this_module: continue
+                        else: running_per_module[module_name] = current_for_this_module+1
+                    
                     sprint(f"{Timestamp()} queued {job.step.name}:{jid}")
                     _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy()))
                     jobs_running[jid] = job
@@ -836,6 +854,8 @@ class Workflow:
                             raise KeyboardInterrupt()
                         job_instance = jobs_running[result.made_by]
                         del jobs_running[result.made_by]
+                        mn = job_instance.step.name
+                        if mn in running_per_module: running_per_module[mn] = running_per_module[mn]-1
                         header = f"{job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
                             sprint(f"{Timestamp()} failed {header}: [{result.error_message}]")
