@@ -613,7 +613,6 @@ class TerminationWatcher:
         print("momdule <psutil> required to stop subprocesses, some may still be alive...")
 
 class InputGroup:
-    input_index = 0
     def __init__(self, by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
         abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
         root, root_value = by
@@ -640,35 +639,57 @@ class InputGroup:
             TAB = '\t'
             tsv.writelines([f"{TAB.join(t)}\n" for t in new_paths])
 
-    def LinkInputs(self, workspace: Path):
+    @classmethod
+    def LinkInputs(cls, workspace: Path, inputs: Iterable[InputGroup]) -> Iterable[InputGroup]:
         here = os.getcwd()
         os.chdir(workspace)
         input_dir = Path(Workflow.INPUT_DIR)
         
+        _seen, _linked = {}, {}
+        def _mark_seen(p: Path):
+            k = p.name
+            _seen[k] = _seen.get(k, 0)+1
+        def _get_num(p: Path):
+            k = p.name
+            if _seen.get(k, 0) == 1: return None
+            num = _linked.get(k, 1)
+            _linked[k] = num+1
+            return num
+        
         links = []
         def _fix(item, path):
             assert os.path.exists(path), f"given [{path}] doesn't exist"
-            InputGroup.input_index+=1
-            link_name = f"{InputGroup.input_index:04}--{path.name}"
+            num = _get_num(path)
+            link_name = path.name if num is None else f"{num:04}--{path.name}"
             linked = input_dir.joinpath(link_name)
             os.symlink(path, linked)
             links.append((link_name, path))
             return linked
 
-        if isinstance(self.root_value, Path):
-            self.root_value = _fix(self.root_type, self.root_value)
-        for item in list(self.children):
-            parsed = []
-            values = self.children[item]
-            for p in values:
-                if isinstance(p, str):
-                    parsed.append(p)
-                    continue
-                linked = _fix(item, p)
-                parsed.append(linked)
-            self.children[item] = parsed
-        self._record_input_paths(links, workspace)
+        for ig in inputs:
+            if isinstance(ig.root_value, Path):
+                _mark_seen(ig.root_value)
+            for item in list(ig.children):
+                for p in ig.children[item]:
+                    if isinstance(p, str): continue
+                    _mark_seen(p)
+
+        for ig in inputs:
+            if isinstance(ig.root_value, Path):
+                ig.root_value = _fix(ig.root_type, ig.root_value)
+            for item in list(ig.children):
+                parsed = []
+                for p in ig.children[item]:
+                    if isinstance(p, str):
+                        parsed.append(p)
+                        continue
+                    linked = _fix(item, p)
+                    parsed.append(linked)
+                ig.children[item] = parsed
+            ig._record_input_paths(links, workspace)
+
         os.chdir(here)
+        return inputs
     
     def ListItems(self):
         return [self.root_type] + list(self.children)
@@ -774,8 +795,8 @@ class Workflow:
             # invalidate also doesn't recursively find all failed instances and children* to delete
             if not os.path.exists(inputs_dir):
                 os.makedirs(inputs_dir)
-                for g in given:
-                    g.LinkInputs(workspace=workspace)
+                nonlocal given
+                given = list(InputGroup.LinkInputs(workspace, given))
             # --------------------------------------------
 
             self._check_feasible(targets)
