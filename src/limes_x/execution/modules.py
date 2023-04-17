@@ -181,7 +181,6 @@ class JobResult(AutoPopulate):
         for k in d:
             v: Any = d[k]
             v = { # switch
-                "exit_code": lambda: int(v),
                 "manifest": lambda: {} if v is None else _dict2manifest(v),
             }.get(k, lambda: v)()
             kwargs[k] = v

@@ -41,9 +41,6 @@ if __name__ == '__main__':
             onOut=lambda s: _on_io(s, out_log),
             onErr=lambda s: _on_io(s, err_log),
         )
-        if code != 0:
-            return code
-
         return code
 
     CONTEXT.shell = _shell
