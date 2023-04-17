@@ -735,8 +735,8 @@ class Workflow:
         if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
         def _ok_for_path(c: str):
             return c.isalpha() or c.isdigit() or c in "-_()[]+=:.?"
-        job_name = "".join([c if _ok_for_path(c) else "_" for c in job_instance.step.name]).rstrip()
-        output_dir_for_target_item = self.OUTPUT_DIR.joinpath(job_name)
+        item_name = "".join([c if _ok_for_path(c) else "_" for c in target.key]).rstrip()
+        output_dir_for_target_item = self.OUTPUT_DIR.joinpath(item_name)
         if not output_dir_for_target_item.exists(): os.makedirs(output_dir_for_target_item)
 
         prefix = f"{job_instance.GetID()}"
