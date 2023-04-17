@@ -2,7 +2,7 @@ from __future__ import annotations
 import os, sys
 import shutil
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 import json
 import uuid
 from threading import Thread, Condition
@@ -271,7 +271,7 @@ class WorkflowState(PrivateInit):
                 candidate = path+[curr] # found one, but want longest
 
             for nnode in self._parent_map.get(curr, set()):
-                if nnode in path: continue
+                if curr == nnode or nnode in path: continue
                 todo.append(Todo(nnode, path+[curr]))
 
         return None if len(candidate) == 0 else candidate
@@ -294,13 +294,13 @@ class WorkflowState(PrivateInit):
                     self.node = node
                     self.depth = depth
 
-            group: list[ItemInstance] = []
+            group: set[ItemInstance] = set()
             todo = [Todo(start, 0)]
             while len(todo)>0:
                 t = todo.pop(0)
                 instance, depth = t.node, t.depth
                 if isinstance(instance, ItemInstance) and instance.item_name == target:
-                    group.append(instance)
+                    group.add(instance)
                     continue # found leaf (target) of @start
 
                 next_name = path[depth+1]
@@ -321,7 +321,7 @@ class WorkflowState(PrivateInit):
                     for i in outs:
                         if i.item_name != next_name: continue
                         todo.append(Todo(i, depth+1))
-            return group
+            return list(group)
 
         groups: dict[ItemInstance, list[ItemInstance]] = {}
         for s in starting_points:
@@ -468,37 +468,10 @@ class WorkflowState(PrivateInit):
             outs[item.key] = insts if len(insts)>1 else insts[0]
         job_inst.MarkAsComplete(outs)
 
-    def Invalidate(self, items: Iterable[Item]):
-        old_save = self._workspace.joinpath(self._FILE_NAME)
-        if not old_save.exists():
-            print("invalidate did nothing since this is the first run")
-            return
+    def _invalidate(self, job_instances_to_delete: Iterable[JobInstance]):
         self._changed = True
 
-        # get steps and items to delete
-        steps_to_delete: list[ComputeModule] = []
-        for step in self._steps:
-            if not any(o in items for o in step.outputs): continue
-            steps_to_delete.append(step)
-        todo = [s.name for s in steps_to_delete]
-        names_to_delete = set()
-        while len(todo)>0:
-            curr = todo.pop()
-            if curr in names_to_delete: continue
-            names_to_delete.add(curr)
-            todo += [c for c in self._parent_map.get(curr, [])]
-
-        # get instances of each item and step
-        given_item_instances = set(self._given_item_instances)
         item_instances_to_delete: list[ItemInstance] = []
-        job_instances_to_delete: list[JobInstance] = []
-        for k in names_to_delete:
-            if k not in self._item_lookup: continue
-            item_instances_to_delete += self._item_lookup[k]
-        for ji in self._job_instances.values():
-            if ji.step in steps_to_delete:
-                job_instances_to_delete.append(ji) 
-
         # remove job instances
         for ji in job_instances_to_delete:
             jk = ji.GetID()
@@ -506,11 +479,13 @@ class WorkflowState(PrivateInit):
             if jk in self._pending_jobs: del self._pending_jobs[jk]
             sig = self._get_signature(list(ji.inputs.values()))
             if sig in self._job_signatures: del self._job_signatures[sig]
+            outs = ji.ListOutputInstances()
+            if outs is not None: item_instances_to_delete += outs
 
         # remove item instances
         for ii in item_instances_to_delete:
-            if ii in given_item_instances: continue
-            if ii.GetID() in given_item_instances: return
+            if ii in self._given_item_instances: continue
+            if ii.GetID() in self._given_item_instances: return
             if ii.item_name in self._item_lookup: del self._item_lookup[ii.item_name]
             if ii in self._item_instance_reservations:
                 del self._item_instance_reservations[ii]
@@ -534,12 +509,67 @@ class WorkflowState(PrivateInit):
         
         deleted_jobs_folders = [ji.GetFolderName() for ji in job_instances_to_delete]
         NL = '\n'
+
+        old_save = self._get_save()
         cmd = f"""\
             mkdir -p {previous_folder}
             {NL.join(f"mv {self._workspace.joinpath(f)} {previous_folder.joinpath(f)}" for f in deleted_jobs_folders)}
             mv {old_save} {previous_folder}
         """
         os.system(cmd)
+
+    def _get_save(self):
+        return self._workspace.joinpath(self._FILE_NAME)
+
+    def _check_can_invalidate(self):
+        old_save = self._get_save()
+        if not old_save.exists():
+            print("invalidate did nothing since this is the first run")
+            return False
+        return True
+
+    def Invalidate(self, items: Iterable[Item]):
+        if not self._check_can_invalidate(): return
+
+        # get steps and items to delete
+        steps_to_delete: list[ComputeModule] = []
+        for step in self._steps:
+            if not any(o in items for o in step.outputs): continue
+            steps_to_delete.append(step)
+        todo = [s.name for s in steps_to_delete]
+        names_to_delete = set()
+        while len(todo)>0:
+            curr = todo.pop()
+            if curr in names_to_delete: continue
+            names_to_delete.add(curr)
+            todo += [c for c in self._parent_map.get(curr, [])]
+
+        # get instances of each item and step
+        item_instances_to_delete: list[ItemInstance] = []
+        for k in names_to_delete:
+            if k not in self._item_lookup: continue
+            item_instances_to_delete += self._item_lookup[k]
+
+        # get job instances from item instances
+        job_instances_to_delete: set[JobInstance] = set()
+        for ii in item_instances_to_delete:
+            ji = ii.made_by
+            if ji is None or not isinstance(ji, JobInstance): continue
+            job_instances_to_delete.add(ji)
+
+        self._invalidate(job_instances_to_delete)
+
+    def InvalidateFails(self):
+        if not self._check_can_invalidate(): return
+
+        to_delete: list[JobInstance] = []
+        for ji in self._job_instances.values():
+            if not ji.complete: continue
+            outs = ji.outputs
+            if outs is None or len(outs)==0:
+                to_delete.append(ji)
+                
+        self._invalidate(to_delete)
 
 class Sync:
     def __init__(self) -> None:
@@ -583,7 +613,6 @@ class TerminationWatcher:
         print("momdule <psutil> required to stop subprocesses, some may still be alive...")
 
 class InputGroup:
-    input_index = 0
     def __init__(self, by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
         abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
         root, root_value = by
@@ -610,35 +639,57 @@ class InputGroup:
             TAB = '\t'
             tsv.writelines([f"{TAB.join(t)}\n" for t in new_paths])
 
-    def LinkInputs(self, workspace: Path):
+    @classmethod
+    def LinkInputs(cls, workspace: Path, inputs: Iterable[InputGroup]) -> Iterable[InputGroup]:
         here = os.getcwd()
         os.chdir(workspace)
         input_dir = Path(Workflow.INPUT_DIR)
         
+        _seen, _linked = {}, {}
+        def _mark_seen(p: Path):
+            k = p.name
+            _seen[k] = _seen.get(k, 0)+1
+        def _get_num(p: Path):
+            k = p.name
+            if _seen.get(k, 0) == 1: return None
+            num = _linked.get(k, 1)
+            _linked[k] = num+1
+            return num
+        
         links = []
         def _fix(item, path):
             assert os.path.exists(path), f"given [{path}] doesn't exist"
-            InputGroup.input_index+=1
-            link_name = f"{InputGroup.input_index:04}--{path.name}"
+            num = _get_num(path)
+            link_name = path.name if num is None else f"{num:04}--{path.name}"
             linked = input_dir.joinpath(link_name)
             os.symlink(path, linked)
             links.append((link_name, path))
             return linked
 
-        if isinstance(self.root_value, Path):
-            self.root_value = _fix(self.root_type, self.root_value)
-        for item in list(self.children):
-            parsed = []
-            values = self.children[item]
-            for p in values:
-                if isinstance(p, str):
-                    parsed.append(p)
-                    continue
-                linked = _fix(item, p)
-                parsed.append(linked)
-            self.children[item] = parsed
-        self._record_input_paths(links, workspace)
+        for ig in inputs:
+            if isinstance(ig.root_value, Path):
+                _mark_seen(ig.root_value)
+            for item in list(ig.children):
+                for p in ig.children[item]:
+                    if isinstance(p, str): continue
+                    _mark_seen(p)
+
+        for ig in inputs:
+            if isinstance(ig.root_value, Path):
+                ig.root_value = _fix(ig.root_type, ig.root_value)
+            for item in list(ig.children):
+                parsed = []
+                for p in ig.children[item]:
+                    if isinstance(p, str):
+                        parsed.append(p)
+                        continue
+                    linked = _fix(item, p)
+                    parsed.append(linked)
+                ig.children[item] = parsed
+            ig._record_input_paths(links, workspace)
+
         os.chdir(here)
+        return inputs
     
     def ListItems(self):
         return [self.root_type] + list(self.children)
@@ -657,6 +708,7 @@ class Workflow:
         else:
             assert os.path.isdir(self._reference_folder), f"reference folder path exists, but is not a folder: {self._reference_folder}"
         self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
+        self._all_modules = compute_modules
 
     def Setup(self, install_type: str):
         for step in self._compute_modules:
@@ -668,7 +720,8 @@ class Workflow:
         steps, dep_map = self._solver.Solve(given_k, targets_k)
         return steps, dep_map
 
-    def _check_feasible(self, steps: list[ComputeModule], targets: Iterable[Item], dep_map: dict[str, list[ComputeModule]]):
+    def _check_feasible(self, targets: Iterable[Item]):
+        steps = self._all_modules
         targets = set(targets)
         products = set()
         for cm in steps:
@@ -676,32 +729,34 @@ class Workflow:
         missing = targets - products
         assert missing == set(), f"no module produces these items [{', '.join(str(i) for i in missing)}]"
 
-        for cm in steps:
-            deps = dep_map[cm.name]
-            for i, g in cm._group_by.items():
-                assert any(g in pre.inputs for pre in deps), f"invalid grouping: [{g.key}] is not upstream of [{i.key}] for module [{cm.name}]"
-
     def _link_output(self, job_instance: JobInstance, target: Item, values: str|Path|list[str]|list[Path]):
         _values: Any = values
         if not isinstance(values, list): _values = [values]
         if not self.OUTPUT_DIR.exists(): os.makedirs(self.OUTPUT_DIR)
-        prefix = f"{job_instance.step.name}--{job_instance.GetID()}"
+        def _ok_for_path(c: str):
+            return c.isalpha() or c.isdigit() or c in "-_()[]+=:.?"
+        job_name = "".join([c if _ok_for_path(c) else "_" for c in job_instance.step.name]).rstrip()
+        output_dir_for_target_item = self.OUTPUT_DIR.joinpath(job_name)
+        if not output_dir_for_target_item.exists(): os.makedirs(output_dir_for_target_item)
+
+        prefix = f"{job_instance.GetID()}"
         for p in _values: # paths should be relative to ws
             if isinstance(p, Path) and p.exists():
-                original = Path(f"../{p}")
+                original = Path(f"../../{p}")
                 toks = str(p).split('/')
                 fname = toks[-1]
                 link = f"{prefix}.{fname}"
-                os.symlink(original, self.OUTPUT_DIR.joinpath(link))
+                os.symlink(original, output_dir_for_target_item.joinpath(link))
             else:
-                with open(self.OUTPUT_DIR.joinpath(f"{prefix}.{target.key}.txt"), 'a') as out:
+                with open(output_dir_for_target_item.joinpath(f"{prefix}.{target.key}.txt"), 'a') as out:
                     out.write(f"{p}\n")
 
     def Run(self, workspace: str|Path, targets: Iterable[Item],
         given: list[InputGroup],
         executor: Executor, params: Params=Params(),
-        regenerate: list[Item]=list(),
+        regenerate: Literal["failures"]|list[Item]=list(),
         max_concurrent: int = 256,
+        max_per_module: dict[str, int] = dict(),
         _catch_errors: bool = True,
     ):
         if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
@@ -732,20 +787,41 @@ class Workflow:
         def _run():
             # make links for inputs in workspace
             inputs_dir = Workflow.INPUT_DIR
-            if os.path.exists(inputs_dir): shutil.rmtree(inputs_dir)
-            os.makedirs(inputs_dir)
-            for g in given:
-                g.LinkInputs(workspace=workspace)
-            inputs = [i for g in [g.ListItems() for g in given] for i in g]
-            _steps, dep_map = self._calculate(inputs, targets)
-            if _steps is False:
-                print(f'no solution exists')
-                return
-            steps: list[ComputeModule] = [s.reference for s in _steps]
+            # --------------------------------------------
+            # !!! todo: major rework of continuation mechanic required; this block is fragile
+            # all paramaters to this fn except for workspace and executor needs to be saved in state
+            # extract _run() to class
+            # split this into 2 public functions, 1 for first run, 1 for continue with invalidate options
+            # invalidate also doesn't recursively find all failed instances and children* to delete
+            if not os.path.exists(inputs_dir):
+                os.makedirs(inputs_dir)
+                nonlocal given
+                given = list(InputGroup.LinkInputs(workspace, given))
+            # --------------------------------------------
+
+            self._check_feasible(targets)
+            _steps = []
+            # look at scratch/cloud_compute/test_deep_grouping.ipynb
+            # fails when one input group is "ahead" of the rest 
+            dep_map = {}
+            for i, ig in enumerate(given):
+                _ig_steps, _dep_map = self._calculate(ig.ListItems(), targets)
+                dep_map.update(_dep_map)
+                if _ig_steps is False:
+                    print(f'no solution exists for input group {i+1}')
+                    return
+                _steps += _ig_steps
+            _unique_steps = {}
+            for s in _steps:
+                c: ComputeModule = s.reference
+                if c.name in _unique_steps: continue
+                _unique_steps[c.name] = c
+            steps: list[ComputeModule] = [s for s in _unique_steps.values()]
             print(f'linearized plan: [{" -> ".join(s.name for s in steps)}]')
-            self._check_feasible(steps, targets, dep_map)
             state = WorkflowState.ResumeIfPossible('./', steps, given)
-            if len(regenerate)>0:
+            if regenerate == "failures":
+                state.InvalidateFails()
+            elif len(regenerate)>0:
                 print(f'will regenerate [{", ".join([r.key for r in regenerate])}] and downstream dependents')
                 state.Invalidate(regenerate)
 
@@ -768,6 +844,7 @@ class Workflow:
 
             jobs_ran = set() # this may be redundant
             jobs_running: dict[str, JobInstance] = {}
+            running_per_module: dict[str, int] = {}
             while not watcher.kill_now:
                 pending_jobs = state.GetPendingJobs()
                 if len(pending_jobs) == 0: break
@@ -776,9 +853,16 @@ class Workflow:
                     if watcher.kill_now:
                         raise KeyboardInterrupt()
                     if len(jobs_running) >= max_concurrent: break
-
                     jid = job.GetID()
                     if jid in jobs_ran: continue
+
+                    module_name = job.step.name
+                    if module_name in max_per_module:
+                        max_for_this_module = max_per_module[module_name]
+                        current_for_this_module = running_per_module.get(module_name, 0)
+                        if current_for_this_module >= max_for_this_module: continue
+                        else: running_per_module[module_name] = current_for_this_module+1
+                    
                     sprint(f"{Timestamp()} queued {job.step.name}:{jid}")
                     _run_job_async(job, lambda: executor.Run(job, workspace, params.Copy()))
                     jobs_running[jid] = job
@@ -791,6 +875,8 @@ class Workflow:
                             raise KeyboardInterrupt()
                         job_instance = jobs_running[result.made_by]
                         del jobs_running[result.made_by]
+                        mn = job_instance.step.name
+                        if mn in running_per_module: running_per_module[mn] = running_per_module[mn]-1
                         header = f"{job_instance.step.name}:{result.made_by}"
                         if not result.error_message is None:
                             sprint(f"{Timestamp()} failed {header}: [{result.error_message}]")
