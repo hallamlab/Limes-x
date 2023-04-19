@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="limes_x",
-    version="0.1.0",
+    version="1.0.0",
     author="Tony Liu",
     author_email="contacttonyliu@gmail.com",
     description="declarative workflow automation",
@@ -32,8 +32,8 @@ setuptools.setup(
     #         'smg = simple_meta:main',
     #     ]
     # },
-    python_requires=">=3.6",
+    python_requires=">=3.10",
     install_requires=[
-        "psutil>=5"
+        "snakemake",
     ]
 )
