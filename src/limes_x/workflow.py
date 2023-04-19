@@ -613,9 +613,9 @@ class TerminationWatcher:
         print("momdule <psutil> required to stop subprocesses, some may still be alive...")
 
 class InputGroup:
-    def __init__(self, by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
+    def __init__(self, group_by: tuple[Item, str|Path], children: dict[Item, str|Path|list[str]|list[Path]]) -> None:
         abs_path_if_path = lambda p: Path(os.path.abspath(p)) if isinstance(p, Path) else p
-        root, root_value = by
+        root, root_value = group_by
         self.root_type = root
         self.root_value: str|Path = abs_path_if_path(root_value)
         self.children: dict[Item, list[str]|list[Path]] = dict((k, [abs_path_if_path(p) for p in v] if isinstance(v, list) else [abs_path_if_path(v)]) for k, v in children.items())

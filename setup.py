@@ -32,8 +32,8 @@ setuptools.setup(
     #         'smg = simple_meta:main',
     #     ]
     # },
-    python_requires=">=3.6",
+    python_requires=">=3.10",
     install_requires=[
-        "psutil>=5"
+        "snakemake",
     ]
 )
