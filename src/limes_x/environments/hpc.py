@@ -93,7 +93,12 @@ if __name__ == '__main__':
 
     # get requirements
     requirements = [str(CONTEXT.params.reference_folder.joinpath(req)) for req in THIS_MODULE.requirements]
+    req_ok = False
     for req in requirements:
+        if not os.path.exists(req):
+            req_ok = False
+            _shell(f'!ERR: requirement [{req}] missing"', is_child=False)
+            break
         _shell(f"""\
             echo "---- getting requirement: {req}"
             cp -r {req} {HPC_REF}
@@ -107,31 +112,32 @@ if __name__ == '__main__':
     with FileSyncedDictionary(WORKSPACE) as com:
         com.RemoveIoTask(CONTEXT.job_id)
 
-    # run step
-    _shell("echo $(date) running...", is_child=False)
-    _shell(f"""\
-        python {env.__file__} {HPC_LIB}/{module_name} {HPC_WS} {RELATIVE_OUTPUT_PATH} {True}\
-    """, is_child=True)
-
-    # gather results
-    BL = {
-        'context.json',
-        'result.json',
-        'realtime.log'
-    }
-    LOCAL_OUT_PATH = Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)
-    for out in os.listdir(RELATIVE_OUTPUT_PATH):
-        if out in BL: continue
+    # run step if @req met
+    if req_ok:
+        _shell("echo $(date) running...", is_child=False)
         _shell(f"""\
-            echo "---- copying back result: {out}"
-            cd {RELATIVE_OUTPUT_PATH}
-            cp -r {out} {LOCAL_OUT_PATH.joinpath(out)}
+            python {env.__file__} {HPC_LIB}/{module_name} {HPC_WS} {RELATIVE_OUTPUT_PATH} {True}\
+        """, is_child=True)
+
+        # gather results
+        BL = {
+            'context.json',
+            'result.json',
+            'realtime.log'
+        }
+        LOCAL_OUT_PATH = Path(WORKSPACE).joinpath(RELATIVE_OUTPUT_PATH)
+        for out in os.listdir(RELATIVE_OUTPUT_PATH):
+            if out in BL: continue
+            _shell(f"""\
+                echo "---- copying back result: {out}"
+                cd {RELATIVE_OUTPUT_PATH}
+                cp -r {out} {LOCAL_OUT_PATH.joinpath(out)}
+            """, is_child=False)
+        _shell("""\
+            echo "---- final workspace:"
+            ls | xargs -I {} sh -c "echo {}/ && ls -lh {}"
+            echo "---- done!"
         """, is_child=False)
-    _shell("""\
-        echo "---- final workspace:"
-        ls | xargs -I {} sh -c "echo {}/ && ls -lh {}"
-        echo "---- done!"
-    """, is_child=False)
 
     result_json = 'result.json'
     result_path = RELATIVE_OUTPUT_PATH.joinpath(result_json)
