@@ -115,7 +115,7 @@ wf = lx.Workflow(
 ```
 
 Run the workflow by indicating the desired data products and giving an SRA accession string as the input. A [sequence read archive](https://www.ncbi.nlm.nih.gov/sra) (SRA) accession points to DNA sequnces hosted by the National Center for Biotechnology Information. 
->**NOTE:** While multiple InputGroups can be provided, each must have identical formats (same Items). This is a bug.
+>**NOTE:** While multiple `InputGroups` can be provided, each must have identical formats (same `Items`). This is a bug.
 
 ```python
 wf.Run(
@@ -138,7 +138,7 @@ wf.Run(
     executor=lx.Executor(),
 )
 ```
-Expected output format:
+Workspace format:
 
 ```
 ├── ./test_workspace
@@ -148,7 +148,7 @@ Expected output format:
     ├── input_paths.tsv
     ├── workflow_state.json
 
-    ├── <module name>--<######>     
+    ├── <module name>--######
         ├── context.json
         ├── result.json
         ├── <module ouputs>
@@ -163,4 +163,140 @@ Expected output format:
 
 # Different execution environments
 
+The default executor will run modules locally. 
+```python
+wf.Run(
+    ...
+    executor=lx.Executor(),
+)
+```
+
+We can use the `HpcExecutor` to interface with high performance compute clusters (HPC) by specifying how to interact with the cluster's scheduler. Here, we write the callback function, `schedule_job`, which will be called when a compute module needs to be executed on the cluster. The executor will pass in a `job` object to our function that provides a `shell`, the `run_command` to execute the compute module.
+
+```python
+from limes_x import Job
+
+def schedule_job(job: Job) -> tuple[bool, str]:
+    return job.Shell(f"""\
+        <schedule a job with the following command>
+        {job.run_command}
+    """)
+
+ex = lx.HpcExecutor(
+    hpc_procedure=schedule_job,
+    tmp_dir_name="TMP"
+)
+wf.Run(
+    ...
+    executor=ex,
+)
+```
+
+`tmp_dir_name` is the environment variable that stores the path to the temporary directory on the worker node. The `HpcExecutor` will transfer all required files/folders there before running the job.
+
+Below is an example with `slurm`, the scheduler used by the Digital Alliance of Canada's Cedar cluster.
+
+```python
+def get_res(job: str, manifest: dict, cores, mem):
+    _cores, _hrs, _mem = {
+        "download_sra":             lambda: (cores, 4,  mem),
+        "extract_mg-reads":         lambda: (cores, 4,  mem),
+        "metagenomic_assembly":     lambda: (cores, 12, mem),
+        "metagenomic_binning":      lambda: (cores, 24, mem),
+        "taxonomy_bin":             lambda: (cores, 4,  mem),
+        "taxonomy_assembly":        lambda: (cores, 4,  mem),
+        "checkm_on_bin":            lambda: (cores, 1,  mem),
+        "annotation_metapathways":  lambda: (cores, 8,  mem),
+    }.get(job, lambda: (cores, 4, mem))()
+    return (_cores, _hrs, _mem)
+
+def slurm(job: lx.Job) -> tuple[bool, str]:
+    p = job.context.params
+    time.sleep(2*random.random())
+    job_name = job.instance.step.name
+    job_id = job.instance.GetID()
+    cores, hrs, mem = get_res(
+        job_name,
+        job.context.manifest,
+        p.threads,
+        p.mem_gb
+    )
+    return job.Shell(f"""\
+        sbatch --wait --account={ALLOC} \
+            --job-name="lx-{job_name}:{job_id}" \
+            --nodes=1 --ntasks=1 \
+            --cpus-per-task={cores} --mem={mem}G --time={hrs}:00:00 \
+            --wrap="{job.run_command}"\
+    """)
+
+ex = lx.HpcExecutor(
+    hpc_procedure=slurm,
+    tmp_dir_name="SLURM_TMPDIR"
+)
+wf.Run(
+    ...
+    executor=ex,
+)
+```
+
 # Making new modules
+
+First, use Limes to generate a template in the folder where you want to keep all of your compute modules.
+```python
+import limes_x as lx
+
+lx.ModuleBuilder.GenerateTemplate(
+    modules_folder = "./compute_modules",
+    name = "a descriptive name",
+)
+```
+
+```
+├── ./compute_modules
+    ├── <module name>
+        ├── lib
+            ├── definition.py
+        ├── setup
+            ├── setup.smk
+
+    ├── <module name>
+        ├── lib
+        ├── setup
+    .
+    .
+    .
+```
+
+The `setup` folder contains the snakemake workflow required to install the module. The `lib` folder must contain (or link to) all scripts required by the compute module. Limes will invoke the module by loading `definition.py` and looking for a `MODULE` variable that holds the compute module.
+
+```python
+# template definition.py
+from pathlib import Path
+from limes_x import ModuleBuilder, Item, JobContext, JobResult
+
+A = Item('a')
+B = Item('b')
+
+DEPENDENCY = "image.sif"
+
+def procedure(context: JobContext) -> JobResult:
+    input_path = context.manifest[A]
+    output_path = context.output_folder.joinpath('copied_file')
+    context.shell(f"cp {input_path} {output_path}")
+    return JobResult(
+        manifest = {
+            B: Path(output_path)
+        },
+    )
+
+MODULE = ModuleBuilder()\
+    .SetProcedure(procedure)\
+    .AddInput(A, groupby=None)\
+    .PromiseOutput(B)\
+    .Requires({DEPENDENCY})\
+    .SuggestedResources(threads=1, memory_gb=4)\
+    .SetHome(__file__, name=None)\
+    .Build()
+```
+
+[For some examples, take a look at this repo.](https://github.com/Tony-xy-Liu/Limes-compute-modules)
