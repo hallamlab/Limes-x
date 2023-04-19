@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/Tony-xy-Liu/Limes-x/main/docs/images/Limes-x_logo.svg" alt="Limes-x"/>
+<img src="https://raw.githubusercontent.com/hallamlab/Limes-x/main/docs/images/Limes-x_logo.svg" alt="Limes-x"/>
 
 ### *Workflows on demand!*
 
@@ -16,7 +16,7 @@
 #!/bin/bash
 pip install limes-x
 
-git clone https://github.com/hallam_lab/Limes-compute-modules.git
+git clone https://github.com/hallamlab/Limes-compute-modules.git
 python ./Limes-compute-module/setup_modules.py ./lx_ref
 ```
 
@@ -95,7 +95,7 @@ Limes-x finds the set of compute modules required to convert the given inputs to
 <br>
 Use the `setup_modules` script to install each module's dependencies and reference databases using Singularity and Snakemake. 
 ```bash
-git clone https://github.com/hallam_lab/Limes-compute-modules.git
+git clone https://github.com/hallamlab/Limes-compute-modules.git
 python ./Limes-compute-module/setup_modules.py ./lx_ref
 ```
 
@@ -299,4 +299,4 @@ MODULE = ModuleBuilder()\
     .Build()
 ```
 
-[For some examples, take a look at this repo.](https://github.com/Tony-xy-Liu/Limes-compute-modules)
+[For some examples, take a look at this repo.](https://github.com/hallamlab/Limes-compute-modules)
