@@ -4,16 +4,16 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="limes_x",
+    name="limes-x",
     version="1.0.0",
     author="Tony Liu",
     author_email="contacttonyliu@gmail.com",
     description="declarative workflow automation",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/Tony-xy-Liu/limes_x",
+    url="https://github.com/hallamlab/limes-x",
     project_urls={
-        "Bug Tracker": "https://github.com/Tony-xy-Liu/limes_x/issues",
+        "Bug Tracker": "https://github.com/hallamlab/limes-x/issues",
     },
     classifiers=[
         "Programming Language :: Python :: 3",
