@@ -94,15 +94,25 @@ if __name__ == '__main__':
     # get requirements
     requirements = [str(CONTEXT.params.reference_folder.joinpath(req)) for req in THIS_MODULE.requirements]
     req_ok = False
-    for req in requirements:
-        if not os.path.exists(req):
-            req_ok = False
-            _shell(f'!ERR: requirement [{req}] missing"', is_child=False)
+    for req_path in requirements:
+        zreq_path = f"{req_path}.tgz"
+        found = False
+        for cmd, req in [
+            (f"cd {HPC_REF} && pigz -dc {zreq_path} | tar -", zreq_path),
+            (f"cp -r {req_path} {HPC_REF}", req_path),
+        ]:
+            if not os.path.exists(req): continue
+            found = True
+            _shell(f"""\
+                echo "---- getting requirement: {req}"
+                {cmd}
+            """, is_child=False)
             break
-        _shell(f"""\
-            echo "---- getting requirement: {req}"
-            cp -r {req} {HPC_REF}
-        """, is_child=False)
+
+        if not found:
+            req_ok = False
+            _shell(f'!ERR: requirement [{req_path}] missing"', is_child=False)
+            break
     _shell(f"ls -lh {HPC_REF}", is_child=False)
     CONTEXT.params.reference_folder = HPC_REF
     CONTEXT.ref = HPC_LIB
