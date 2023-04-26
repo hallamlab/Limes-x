@@ -95,10 +95,10 @@ if __name__ == '__main__':
     requirements = [str(CONTEXT.params.reference_folder.joinpath(req)) for req in THIS_MODULE.requirements]
     req_ok = False
     for req_path in requirements:
-        zreq_path = f"{req_path}.tgz"
         found = False
         for cmd, req in [
-            (f"cd {HPC_REF} && pigz -dc {zreq_path} | tar -", zreq_path),
+            (f"cd {HPC_REF} && pigz -dc {req_path}.tar.gz | tar -", f"{req_path}.tar.gz"),
+            (f"cd {HPC_REF} && pigz -dc {req_path}.tgz | tar -", f"{req_path}.tgz"),
             (f"cp -r {req_path} {HPC_REF}", req_path),
         ]:
             if not os.path.exists(req): continue
