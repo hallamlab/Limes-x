@@ -93,7 +93,7 @@ if __name__ == '__main__':
 
     # get requirements
     requirements = [str(CONTEXT.params.reference_folder.joinpath(req)) for req in THIS_MODULE.requirements]
-    req_ok = False
+    req_ok = True
     for req_path in requirements:
         found = False
         for cmd, req in [
@@ -111,7 +111,7 @@ if __name__ == '__main__':
 
         if not found:
             req_ok = False
-            _shell(f'!ERR: requirement [{req_path}] missing"', is_child=False)
+            _shell(f'echo "ERROR: requirement [{req_path}] missing"', is_child=False)
             break
     _shell(f"ls -lh {HPC_REF}", is_child=False)
     CONTEXT.params.reference_folder = HPC_REF
@@ -124,7 +124,7 @@ if __name__ == '__main__':
 
     # run step if @req met
     if req_ok:
-        _shell("echo $(date) running...", is_child=False)
+        _shell("echo running...", is_child=False)
         _shell(f"""\
             python {env.__file__} {HPC_LIB}/{module_name} {HPC_WS} {RELATIVE_OUTPUT_PATH} {True}\
         """, is_child=True)
@@ -148,6 +148,8 @@ if __name__ == '__main__':
             ls | xargs -I {} sh -c "echo {}/ && ls -lh {}"
             echo "---- done!"
         """, is_child=False)
+    else:
+        _shell('echo "terminating due to missing requirement', is_child=False)
 
     result_json = 'result.json'
     result_path = RELATIVE_OUTPUT_PATH.joinpath(result_json)
