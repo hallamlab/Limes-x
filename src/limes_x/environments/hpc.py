@@ -149,7 +149,7 @@ if __name__ == '__main__':
             echo "---- done!"
         """, is_child=False)
     else:
-        _shell('echo "terminating due to missing requirement', is_child=False)
+        _shell('echo "terminating due to missing requirement"', is_child=False)
 
     result_json = 'result.json'
     result_path = RELATIVE_OUTPUT_PATH.joinpath(result_json)
