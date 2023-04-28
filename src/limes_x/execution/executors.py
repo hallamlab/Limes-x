@@ -33,8 +33,10 @@ class Job:
         if _save: c.Save(workspace)
         self.context = c
 
-    def Shell(self, cmd: str):
+    def SaveContext(self):
         self.context.Save(self.context.output_folder)
+
+    def Shell(self, cmd: str):
         err_log = []
         pr = lambda s: print(s, end="")
         code=LiveShell(cmd, echo_cmd=False, onErr=lambda s: err_log.append(s), onOut=pr if self._verbose else lambda s: None)
