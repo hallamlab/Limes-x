@@ -34,6 +34,7 @@ class Job:
         self.context = c
 
     def Shell(self, cmd: str):
+        self.context.Save(self.context.output_folder)
         err_log = []
         pr = lambda s: print(s, end="")
         code=LiveShell(cmd, echo_cmd=False, onErr=lambda s: err_log.append(s), onOut=pr if self._verbose else lambda s: None)
