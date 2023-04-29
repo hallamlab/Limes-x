@@ -34,7 +34,7 @@ class Job:
         self.context = c
 
     def SaveContext(self):
-        self.context.Save(self.context.output_folder)
+        self.context.Save(self.workspace)
 
     def Shell(self, cmd: str):
         err_log = []
