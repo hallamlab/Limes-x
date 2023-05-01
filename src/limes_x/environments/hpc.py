@@ -48,7 +48,7 @@ if __name__ == '__main__':
             if not is_child: f.write(line+NEWLINE)
 
     def _shell(cmd: str, is_child: bool):
-        cmd = cmd.replace("  ", "")
+        cmd = " ".join([tok for tok in cmd.split(" ") if tok != ""])
         lines = cmd.split('\n')
         ts = _timestamp()
         cmd_history.append(f"{ts}")
@@ -163,6 +163,8 @@ if __name__ == '__main__':
         else:
             return {}
 
+    # todo: consolidate shell def with local
+    # todo: get exectutor cmd,out,err and use with local
     res = _get_result_json()
     res['hpc-wrapper_commands'] = cmd_history
     res['hpc-wrapper_out'] = out_log
