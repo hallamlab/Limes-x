@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="limes-x",
-    version="1.0.1",
+    version="1.0.2",
     author="Tony Liu",
     author_email="contacttonyliu@gmail.com",
     description="declarative workflow automation",

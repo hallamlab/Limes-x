@@ -24,8 +24,8 @@ case $1 in
     --pip-upload|-u)
         # upload to pypi
         # use testpypi for dev
-        PYPI=testpypi
-        # PYPI=pypi
+        # PYPI=testpypi
+        PYPI=pypi
         TOKEN=`cat secrets/${PYPI}`
         python -m twine upload --repository $PYPI dist/* -u __token__ -p $TOKEN
     ;;
