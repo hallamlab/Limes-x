@@ -12,9 +12,8 @@ case $1 in
         pip install twine build
     ;;
     --pip-install|-i)
-        # build and install the package locally
-        python setup.py build \
-        && python setup.py install
+        # install the package locally
+        python setup.py install
     ;;
     --pip-build|-b)
         # build the packge for upload to pypi
@@ -32,8 +31,27 @@ case $1 in
     --pip-remove|-x)
         pip uninstall -y limes_x
     ;;
-    -t)
-        echo "hi"
+    --test|-t)
+        shift
+        cd $HERE/src
+        # python -m limes_x $@
+
+        # # setup
+        # python -m limes_x setup \
+        #     -o ./test/cache/lx_setup \
+        #     -m /home/tony/workspace/python/Limes-all/Limes-compute-modules/logistics \
+        #     -m /home/tony/workspace/python/Limes-all/Limes-compute-modules/metagenomics /home/tony/workspace/python/Limes-all/Limes-compute-modules/high_throughput_screening \
+        #     --blacklist annotation_dram
+
+        # slurm
+        python -m limes_x slurm \
+            -o /home/tony/workspace/python/Limes-all/Limes-x/test/cache \
+            -m /home/tony/workspace/python/Limes-all/Limes-compute-modules/logistics \
+            -m /home/tony/workspace/python/Limes-all/Limes-compute-modules/metagenomics \
+            -r /home/tony/workspace/python/Limes-all/lx_ref \
+            -a alloc \
+            -i a b c \
+            -t x y z 
     ;;
     *)
         echo "bad option"
