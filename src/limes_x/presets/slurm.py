@@ -33,7 +33,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
     #------------------------------------------------------------------------------------------
     # load context and setup
 
-    run_folder = Path(sys.argv[1])
+    run_folder = Path(sys.argv[2])
     os.chdir(run_folder)
     WS = Path("./")
     with open(_CONTEXT_FILE, "r") as f:
@@ -225,11 +225,11 @@ def Run(
         json.dump(context, f, indent=4)
 
     os.chdir(run_folder)
-    out_log = "slurm.out"
+    out_log = "slurm.cmd"
     cmd = f"""\
     sbatch --account={allocation} \
         --job-name="{run_name}" \
-        --nodes=1 --ntasks=1 --error slurm.err --output {out_log} \
+        --nodes=1 --ntasks=1 --error slurm.err --output slurm.out \
         --cpus-per-task=1 --mem=4G --time={time} \
         --wrap="python {SCRIPT} {_INNER} {run_folder}" >> {out_log}
     """.replace("  ", "")
