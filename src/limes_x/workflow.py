@@ -759,7 +759,7 @@ class Workflow:
         max_per_module: dict[str, int] = dict(),
         _catch_errors: bool = True,
     ):
-        if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
+        workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
         params.reference_folder = self._reference_folder

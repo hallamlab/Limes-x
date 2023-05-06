@@ -22,13 +22,14 @@ Run(
     ],
     given=[
         lx.InputGroup(  
-            group_by=(lx.Item("sra accession"), "SRR19573024"), 
+            group_by=(lx.Item("sra accession"), "SRR10140508"), 
             children={
                 lx.Item("username"): "Steven",
             },
         )
     ],
     allocation="alloc_code",
-    time="48:00:00",
+    # continue_from="folder_name",
+    # time="48:00:00",
     # name="a test run",
 )

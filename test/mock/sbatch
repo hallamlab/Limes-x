@@ -1,0 +1,21 @@
+#!/home/tony/Utilities/mambaforge/envs/p310/bin/python
+import os, sys
+from datetime import datetime
+from pathlib import Path
+
+now = datetime.now() 
+date_time = now.strftime("%H:%M:%S.%f")
+
+SCRIPT = os.path.abspath(__file__)
+SCRIPT_DIR = Path("/".join(SCRIPT.split("/")[:-1]))
+
+for a in sys.argv:
+    if "--wrap" in a:
+        cmd = a.replace("--wrap=", "")
+        with open(SCRIPT_DIR.joinpath(f"cache/sbatch-{date_time}"), "w") as f:
+            f.write(cmd)
+        os.system(f"""\
+            export PYTHONPATH=""
+            {cmd}
+        """)
+        break

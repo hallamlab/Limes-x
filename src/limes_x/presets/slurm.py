@@ -144,7 +144,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
 
     slurm_ids = set()
     for f in os.listdir(WS):
-        if "slurm" not in f: continue
+        if "slurm-" not in f: continue
         slurm_ids.add(f.replace("slurm-", "").replace(".out", ""))
 
     # todo: get the info as jobs finish
@@ -185,23 +185,34 @@ def Run(
     allocation: str,
     time: str="48:00:00",
     name: str|None=None,
+    continue_from: str|None=None,
 ):
     def _ok_for_path(c: str):
         return c.isalpha() or c.isdigit() or c in "-_"
     if name is not None: name = "".join([c if _ok_for_path(c) else "_" for c in name])
 
-    now = datetime.now() 
-    date_time = now.strftime("%Y-%m-%d_%H-%M")
-    run_id = f'{uuid.uuid4().hex[:3]}'
-    workspace = Path(workspace)
-    run_name = f"{run_id}-{name}" if name is not None else f"{run_id}-lx"
-    run_folder = workspace.joinpath(f"{date_time}.{run_name}"); os.makedirs(run_folder)
+    workspace = Path(os.path.abspath(workspace))
+    if continue_from is None:
+        now = datetime.now() 
+        date_time = now.strftime("%Y-%m-%d_%H-%M")
+        run_id = f'{uuid.uuid4().hex[:3]}'
+        run_name = f"{run_id}-{name}" if name is not None else f"{run_id}-lx"
+        run_folder = workspace.joinpath(f"{date_time}.{run_name}"); os.makedirs(run_folder)
+    else:
+        run_folder = workspace.joinpath(continue_from)
+        assert run_folder.exists(), f"path {run_folder} doesn't exist"
+        run_name = continue_from.split(".")[1]
+        run_id = run_name.split("-")[0]
+        date_time = continue_from.split(".")[0]
 
     def _parse_given(g: InputGroup):
         children = {}
         for k, v in g.children.items():
-            if isinstance(v, list) and len(v)>1:
-                v = [Parser(x).ToDict() for x in v]
+            if isinstance(v, list):
+                if len(v) > 1:
+                    v = [Parser(x).ToDict() for x in v]
+                else:
+                    v = Parser(v[0]).ToDict()
             else:
                 v = Parser(v).ToDict()
             children[k.key] = v
@@ -211,7 +222,7 @@ def Run(
             children = children,
         )
 
-    reference_folder = str(reference_folder)
+    reference_folder = os.path.abspath(reference_folder)
     with open(run_folder.joinpath(_CONTEXT_FILE), 'w') as f:
         context = dict(
             pythonpath = [os.path.abspath(p) for p in sys.path],
