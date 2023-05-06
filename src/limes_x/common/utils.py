@@ -50,6 +50,10 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
         else:
             cb(msg)
 
+    kwargs = {}
+    bash = "/bin/bash"
+    if os.path.exists(bash):
+        kwargs["executable"] = bash
     ENCODING = 'utf-8'
     process = subprocess.Popen(
         cmd,
@@ -57,6 +61,7 @@ def LiveShell(cmd: str, onOut: Callable[[str], None]|None=None, onErr: Callable[
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        **kwargs,
     )
 
     if echo_cmd: callback(onOut, f'{cmd}\n')
