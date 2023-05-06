@@ -47,7 +47,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
         root_v = Parser.FromDict(g["root_v"])
 
         children = {}
-        for k, v in g.get("children", []):
+        for k, v in g.get("children", {}).items():
             if isinstance(v, list):
                 v = [Parser.FromDict(x) for x in v]
             else:
@@ -200,7 +200,7 @@ def Run(
     def _parse_given(g: InputGroup):
         children = {}
         for k, v in g.children.items():
-            if isinstance(v, list):
+            if isinstance(v, list) and len(v)>1:
                 v = [Parser(x).ToDict() for x in v]
             else:
                 v = Parser(v).ToDict()
