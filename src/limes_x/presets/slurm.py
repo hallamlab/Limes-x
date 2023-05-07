@@ -76,7 +76,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
         def _tax_bin():
             bins = manifest.get(Item('metagenomic bin'), [])
             if not isinstance(bins, list): bins = [bins]
-            hrs = (0.33*len(bins)) + 2 # 20mins/bin + 2hr grace
+            hrs = (0.5*len(bins)) + 4 # 20mins/bin + 2hr grace
             hrs = min(hrs, 48)
             return 4, hrs, 60 # max mem for 2 jobs/most common node
 
@@ -86,7 +86,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
             rstats = [os.stat(p) for p in rpaths]
             rsize = sum([s.st_size / (1024**3) for s in rstats]) # gb
 
-            if rsize > 5:
+            if rsize > 4:
                 return 24, 36, 100
             elif rsize > 0.6:
                 return 16, 24, 60
@@ -94,13 +94,13 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
                 return cores, 12, mem
 
         _cores, _time, _mem = {
-            "download_sra":             lambda: (cores, 4,  mem),
+            "download_sra":             lambda: (cores, 6,  mem),
             "extract_mg-reads":         lambda: (cores, 4,  mem),
             "metagenomic_assembly":     _asm,
             "metagenomic_binning":      lambda: (16, 24, 60), # todo scale this
             "taxonomy_on_bin":          _tax_bin,
-            "taxonomy_on_assembly":     lambda: (2, 1,  48),
-            "checkm_on_bin":            lambda: (cores, 1,  mem),
+            "taxonomy_on_assembly":     lambda: (2, 4,  60),
+            "checkm_on_bin":            lambda: (cores, 2,  mem),
             "annotation_metapathways":  lambda: (cores, 16,  mem),
         }.get(job, lambda: (cores, 4, mem))()
 
