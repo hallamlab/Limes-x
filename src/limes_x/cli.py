@@ -4,14 +4,12 @@ from pathlib import Path
 
 from .execution.modules import ComputeModule
 
-LINE = "#"*60
 HERE = Path("/".join(os.path.realpath(__file__).split('/')[:-1]))
 NAME = "Limes-x"
 with open(HERE.joinpath("version.txt")) as f:
     VERSION = f.read()
 
 HEADER = f"""\
-{LINE}
 {NAME}
 v{VERSION}
 """
@@ -26,6 +24,7 @@ def fprint(x):
     return print(f"{x}".replace("  ", ""))
 
 def print_header():
+    fprint("#"*os.get_terminal_size().columns)
     fprint(HEADER)
 
 def help():
@@ -41,7 +40,7 @@ def help():
     """)
 
 def _flatten(lst):
-    return [x for g in lst for x in g]
+    return [x for g in lst for x in g] if lst is not None else []
 
 def setup(args):
     parser = ArgumentParser(prog=f'{CMD} setup')
@@ -54,7 +53,7 @@ def setup(args):
     parser.add_argument('--output', "-o", metavar='PATH', help="where to setup dependencies", required=True)
     parser.add_argument(
         '--blacklist', "-b",
-        action='append', nargs='+',
+        action='append', nargs='+', default=[],
         metavar='PATH', help="names of modules to skip"
     )
     pargs = parser.parse_args(args)
