@@ -89,7 +89,6 @@ def setup(args):
     for i, m in enumerate(modules):
         fprint(f"{i+1} of {len(modules)}")
         m.Setup(ref, "singularity") # only sing. for now
-        if i >= 1: break
 
     print("done")
 
