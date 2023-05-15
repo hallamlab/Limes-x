@@ -10,12 +10,13 @@ modules += lx.LoadComputeModules("../../Limes-compute-modules/metagenomics")
 Run(
     modules = modules,
     reference_folder="../../lx_ref",
-    workspace="./cache/test_workspace",
+    workspace="./cache/test_slurm",
     targets=[
         lx.Item('metagenomic gzipped reads'),
         lx.Item('metagenomic assembly'),
         lx.Item("metagenomic bin"),
         lx.Item("checkm stats"),
+        lx.Item('reads taxonomy table'),
         lx.Item('bin taxonomy table'),
         lx.Item('assembly taxonomy table'),
         lx.Item('genomic annotation'),
@@ -24,7 +25,11 @@ Run(
         lx.InputGroup(  
             group_by=(lx.Item("sra accession"), "SRR10140508"), 
             children={
-                lx.Item("username"): "Steven",
+                lx.Item("username"): "Tony",
+                lx.Item("metagenomic gzipped reads"): [Path(p) for p in [
+                    "/home/tony/workspace/python/Limes-all/Limes-x/test/cache/SRR10140508/SRR10140508_1.fastq.gz",
+                    "/home/tony/workspace/python/Limes-all/Limes-x/test/cache/SRR10140508/SRR10140508_2.fastq.gz",
+                ]],
             },
         )
     ],

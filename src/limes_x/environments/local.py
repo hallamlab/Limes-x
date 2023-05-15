@@ -51,7 +51,7 @@ if __name__ == '__main__':
     result = None
     err = ""
     try:
-        sys.path = list(set([str(CONTEXT.ref)] + sys.path))
+        sys.path = list(set([str(CONTEXT.params.reference_folder)] + sys.path))
         result = THIS_MODULE._procedure(CONTEXT)
     except Exception as e:
         err = str(e)
