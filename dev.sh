@@ -12,9 +12,8 @@ case $1 in
         pip install twine build
     ;;
     --pip-install|-i)
-        # build and install the package locally
-        python setup.py build \
-        && python setup.py install
+        # install the package locally
+        python setup.py install
     ;;
     --pip-build|-b)
         # build the packge for upload to pypi
@@ -24,16 +23,21 @@ case $1 in
     --pip-upload|-u)
         # upload to pypi
         # use testpypi for dev
-        PYPI=testpypi
-        # PYPI=pypi
+        # PYPI=testpypi
+        PYPI=pypi
         TOKEN=`cat secrets/${PYPI}`
         python -m twine upload --repository $PYPI dist/* -u __token__ -p $TOKEN
     ;;
     --pip-remove|-x)
         pip uninstall -y limes_x
     ;;
-    -t)
-        echo "hi"
+    --test|-t)
+        shift
+        cd $HERE/test
+        export SLURM_TMPDIR=/home/tony/workspace/python/Limes-all/Limes-x/test/cache/temp
+        PATH=$HERE/test/mock:$PATH
+        PYTHONPATH=$HERE/src:$PYTHONPATH
+        python preset_slurm.py
     ;;
     *)
         echo "bad option"

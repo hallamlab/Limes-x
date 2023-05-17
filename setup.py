@@ -3,9 +3,12 @@ import setuptools
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
+with open("./src/limes_x/version.txt") as f:
+    version = f.read()
+
 setuptools.setup(
     name="limes-x",
-    version="1.0.0",
+    version=version,
     author="Tony Liu",
     author_email="contacttonyliu@gmail.com",
     description="declarative workflow automation",
@@ -22,16 +25,16 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     # packages=pks,
-    # package_data={
-    #     # "":["*.txt"],
-    #     # "package-name": ["*.txt"],
-    #     # "test_package": ["res/*.txt"],
-    # },
-    # entry_points={
-    #     'console_scripts': [
-    #         'smg = simple_meta:main',
-    #     ]
-    # },
+    package_data={
+        "":["version.txt"],
+        # "package-name": ["*.txt"],
+        # "test_package": ["res/*.txt"],
+    },
+    entry_points={
+        'console_scripts': [
+            'lx = limes_x:main',
+        ]
+    },
     python_requires=">=3.10",
     install_requires=[
         "snakemake",

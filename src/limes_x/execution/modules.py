@@ -103,7 +103,6 @@ class JobContext(AutoPopulate):
     output_folder: Path
     manifest: dict[Item, str|Path|list[str|Path]]
     job_id: str
-    ref: Path
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -144,7 +143,6 @@ class JobContext(AutoPopulate):
                     'params': lambda: Params.FromDict(v),
                     'manifest': lambda: _dict2manifest(v),
                     'output_folder': lambda: Path(v),
-                    'ref': lambda: Path(v),
                 }.get(k, lambda: str(v))()
                 kwargs[k] = v
             if 'output_folder' not in d:

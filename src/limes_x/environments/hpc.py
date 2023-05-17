@@ -48,7 +48,7 @@ if __name__ == '__main__':
             if not is_child: f.write(line+NEWLINE)
 
     def _shell(cmd: str, is_child: bool):
-        cmd = cmd.replace("  ", "")
+        cmd = " ".join([tok for tok in cmd.split(" ") if tok != ""])
         lines = cmd.split('\n')
         ts = _timestamp()
         cmd_history.append(f"{ts}")
@@ -93,16 +93,26 @@ if __name__ == '__main__':
 
     # get requirements
     requirements = [str(CONTEXT.params.reference_folder.joinpath(req)) for req in THIS_MODULE.requirements]
-    req_ok = False
-    for req in requirements:
-        if not os.path.exists(req):
-            req_ok = False
-            _shell(f'!ERR: requirement [{req}] missing"', is_child=False)
+    req_ok = True
+    for req_path in requirements:
+        found = False
+        for cmd, req in [
+            # (f"cd {HPC_REF} && pigz -dc {req_path}.tar.gz | tar -", f"{req_path}.tar.gz"),
+            (f"cd {HPC_REF} && pigz -dc {req_path}.lx.tgz | tar -", f"{req_path}.lx.tgz"),
+            (f"cp -r {req_path} {HPC_REF}", req_path),
+        ]:
+            if not os.path.exists(req): continue
+            found = True
+            _shell(f"""\
+                echo "---- getting requirement: {req}"
+                {cmd}
+            """, is_child=False)
             break
-        _shell(f"""\
-            echo "---- getting requirement: {req}"
-            cp -r {req} {HPC_REF}
-        """, is_child=False)
+
+        if not found:
+            req_ok = False
+            _shell(f'echo "ERROR: requirement [{req_path}] missing"', is_child=False)
+            break
     _shell(f"ls -lh {HPC_REF}", is_child=False)
     CONTEXT.params.reference_folder = HPC_REF
     CONTEXT.ref = HPC_LIB
@@ -114,7 +124,7 @@ if __name__ == '__main__':
 
     # run step if @req met
     if req_ok:
-        _shell("echo $(date) running...", is_child=False)
+        _shell("echo running...", is_child=False)
         _shell(f"""\
             python {env.__file__} {HPC_LIB}/{module_name} {HPC_WS} {RELATIVE_OUTPUT_PATH} {True}\
         """, is_child=True)
@@ -138,6 +148,8 @@ if __name__ == '__main__':
             ls | xargs -I {} sh -c "echo {}/ && ls -lh {}"
             echo "---- done!"
         """, is_child=False)
+    else:
+        _shell('echo "terminating due to missing requirement"', is_child=False)
 
     result_json = 'result.json'
     result_path = RELATIVE_OUTPUT_PATH.joinpath(result_json)
@@ -151,6 +163,8 @@ if __name__ == '__main__':
         else:
             return {}
 
+    # todo: consolidate shell def with local
+    # todo: get exectutor cmd,out,err and use with local
     res = _get_result_json()
     res['hpc-wrapper_commands'] = cmd_history
     res['hpc-wrapper_out'] = out_log

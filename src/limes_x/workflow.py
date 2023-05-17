@@ -169,7 +169,7 @@ class WorkflowState(PrivateInit):
             state._ids.update(item_instances)
             state._ids.update(job_instances)
             state._job_instances = job_instances
-            state._job_signatures = dict((state._get_signature(list(ji.inputs.values())), ji) for ji in job_instances.values())
+            state._job_signatures = dict((state._get_signature(ji.step.name, list(ji.inputs.values())), ji) for ji in job_instances.values())
             for k in serialized_state["pending_jobs"]:
                 ji = job_instances[k]
                 assert isinstance(ji, JobInstance)
@@ -242,10 +242,10 @@ class WorkflowState(PrivateInit):
         self._ids.add(id)
         return id
 
-    def _get_signature(self, inputs: Iterable[ItemInstance|list[ItemInstance]]):
+    def _get_signature(self, module_name: str, inputs: Iterable[ItemInstance|list[ItemInstance]]):
         inputs_list = [ii for g in [g if isinstance(g, list) else [g] for g in inputs] for ii in g]
         input_keys = sorted(ii.GetID() for ii in inputs_list)
-        signature = "-".join(input_keys)
+        signature = "-".join([module_name]+input_keys)
         return signature
 
     def GetPendingJobs(self):
@@ -433,7 +433,8 @@ class WorkflowState(PrivateInit):
             if instances is None: continue
             # print(f"{module.name} {len(instances)}")
             for space in instances:
-                signature = self._get_signature(list(space.values()))
+                signature = self._get_signature(module.name, list(space.values()))
+                print(signature)
                 if signature in self._job_signatures: continue
                 # print(module.name, space)
 
@@ -442,7 +443,7 @@ class WorkflowState(PrivateInit):
             self._changed = True
 
     def _register_job_instance(self, inst: JobInstance):
-        self._job_signatures[self._get_signature(inst.inputs.values())] = inst
+        self._job_signatures[self._get_signature(inst.step.name, inst.inputs.values())] = inst
         self._pending_jobs[inst.GetID()] = inst
         self._job_instances[inst.GetID()] = inst
         for ii in inst.ListInputInstances():
@@ -477,7 +478,7 @@ class WorkflowState(PrivateInit):
             jk = ji.GetID()
             if jk in self._job_instances: del self._job_instances[jk]
             if jk in self._pending_jobs: del self._pending_jobs[jk]
-            sig = self._get_signature(list(ji.inputs.values()))
+            sig = self._get_signature(ji.step.name, list(ji.inputs.values()))
             if sig in self._job_signatures: del self._job_signatures[sig]
             outs = ji.ListOutputInstances()
             if outs is not None: item_instances_to_delete += outs
@@ -759,7 +760,7 @@ class Workflow:
         max_per_module: dict[str, int] = dict(),
         _catch_errors: bool = True,
     ):
-        if isinstance(workspace, str): workspace = Path(os.path.abspath(workspace))
+        workspace = Path(os.path.abspath(workspace))
         if not workspace.exists():
             os.makedirs(workspace)
         params.reference_folder = self._reference_folder
