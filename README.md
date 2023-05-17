@@ -2,7 +2,7 @@
 
 ### *Workflows on demand!*
 
-# For the impatient- Local execution
+# For the impatient - Local execution
 
 ### **Dependencies**
 - Python
@@ -27,28 +27,27 @@ python ./Limes-compute-module/setup_modules.py ./lx_ref
 import limes_x as lx
 
 modules = []
-modules += lx.LoadComputeModules("path/to/Limes-compute-modules/logistics") #Change this based on your file path
-modules += lx.LoadComputeModules("path/to/Limes-compute-modules/metagenomics") #Change this based on your file path
+modules += lx.LoadComputeModules("path/to/Limes-compute-modules/logistics")    # Change this based on your file path
+modules += lx.LoadComputeModules("path/to/Limes-compute-modules/metagenomics") # Change this based on your file path
 
 wf = lx.Workflow(
     compute_modules=modules,
-    reference_folder="path/to/lx_ref", #Change this based on your file path
+    reference_folder="path/to/lx_ref",      # Change this based on your file path
 )
 
 wf.Run(
-    workspace="path/to/output/directory", #Change this based on your file path
+    workspace="path/to/output/directory",   # Change this based on your file path
     targets=[
-        lx.Item('metagenomic gzipped reads'),
         lx.Item('metagenomic assembly'),
         lx.Item("metagenomic bin"),
-        lx.Item('bin taxonomy table'),
-        lx.Item('assembly taxonomy table'),
+        lx.Item("metagenomic binning stats"),
+        lx.Item('reads taxonomy table'),
         lx.Item('genomic annotation'),
     ],
     given=[
         lx.InputGroup(  
-            group_by=(lx.Item("sra accession"), "SRR"), 
-            children={lx.Item("username"): "user"}, # use "whoami" in bash
+            group_by=(lx.Item("sra accession"), "SRR..."),  # example: SRR19573024
+            children={lx.Item("username"): "user"},         # use "whoami" in bash
         )
     ],
     executor=lx.Executor(),
@@ -124,19 +123,21 @@ We will then run the workflow (wf) by indicating the desired data products and g
 
 ```python
 wf.Run(
-    workspace="./test_workspace", #Path to the output directory
+    workspace="./test_workspace", # Path to the output directory
     targets=[
         lx.Item('metagenomic gzipped reads'),
         lx.Item('metagenomic assembly'),
         lx.Item("metagenomic bin"),
-        lx.Item('bin taxonomy table'),
+        lx.Item("metagenomic binning stats"),
+        lx.Item('reads taxonomy table'),
         lx.Item('assembly taxonomy table'),
+        lx.Item('bin taxonomy table'),
         lx.Item('genomic annotation'),
     ],
     given=[
         lx.InputGroup(  
             group_by=(lx.Item("sra accession"), "SRR19573024"), 
-            children={lx.Item("username"): "user"}, #Switch to include your username 
+            children={lx.Item("username"): "user"}, # Switch to include your username 
         )
     ],
     executor=lx.Executor(),
@@ -174,24 +175,26 @@ import limes_x as lx
 import pandas as pd
 
 modules = []
-modules += lx.LoadComputeModules("path/to/Limes-compute-modules/logistics") #Change this based on your file path
-modules += lx.LoadComputeModules("path/to/Limes-compute-modules/metagenomics") #Change this based on your file path
+modules += lx.LoadComputeModules("path/to/Limes-compute-modules/logistics")     # Change this based on your file path
+modules += lx.LoadComputeModules("path/to/Limes-compute-modules/metagenomics")  # Change this based on your file path
 
 data = pd.read_csv("accession_list.csv")
 
 wf = lx.Workflow(
     compute_modules=modules,
-    reference_folder="path/to/lx_ref", #Change this based on your file path
+    reference_folder="path/to/lx_ref",      # Change this based on your file path
 )
 
 wf.Run(
-    workspace="path/to/output/directory", #Change this based on your file path
+    workspace="path/to/output/directory",   # Change this based on your file path
     targets=[
         lx.Item('metagenomic gzipped reads'),
         lx.Item('metagenomic assembly'),
         lx.Item("metagenomic bin"),
-        lx.Item('bin taxonomy table'),
+        lx.Item("metagenomic binning stats"),
+        lx.Item('reads taxonomy table'),
         lx.Item('assembly taxonomy table'),
+        lx.Item('bin taxonomy table'),
         lx.Item('genomic annotation'),
     ],
     given=[
@@ -231,31 +234,33 @@ import limes_x as lx
 from limes_x.presets.slurm import Run
 
 modules = []
-modules += lx.LoadComputeModules("path/to/Limes-compute-modules/logistics") #Change this based on your file path
-modules += lx.LoadComputeModules("path/to/Limes-compute-modules/metagenomics") #Change this based on your file path
+modules += lx.LoadComputeModules("path/to/Limes-compute-modules/logistics")     # Change this based on your file path
+modules += lx.LoadComputeModules("path/to/Limes-compute-modules/metagenomics")  # Change this based on your file path
 
 Run(
     modules = modules,
     reference_folder = "path/to/lx_ref",
-    workspace="path/to/output/directory", #Change this based on your file path
+    workspace="path/to/output/directory", # Change this based on your file path
     targets=[
         lx.Item('metagenomic gzipped reads'),
         lx.Item('metagenomic assembly'),
         lx.Item("metagenomic bin"),
-        lx.Item('bin taxonomy table'),
+        lx.Item("metagenomic binning stats"),
+        lx.Item('reads taxonomy table'),
         lx.Item('assembly taxonomy table'),
+        lx.Item('bin taxonomy table'),
         lx.Item('genomic annotation'),
     ],
     given=[
         lx.InputGroup(  
-            group_by=(lx.Item("sra accession"), "SRR"), 
+            group_by=(lx.Item("sra accession"), "SRR..."), # example: SRR19573024
             children={
               lx.Item("username"): "user"}, # use "whoami" in bash
         )
     ],
-    allocation="alloc_code",            # This would be the allocation code on cedar
+    allocation="alloc_code", # This would be the allocation code on cedar
     time="48:00:00",
-    name="Trial run",                  # Change this to the name you want to give your run
+    name="Trial run", # Change this to the name you want to give your run
 )
 ```
 
