@@ -97,8 +97,8 @@ if __name__ == '__main__':
     for req_path in requirements:
         found = False
         for cmd, req in [
-            # (f"cd {HPC_REF} && pigz -dc {req_path}.tar.gz | tar -", f"{req_path}.tar.gz"),
-            (f"cd {HPC_REF} && pigz -dc {req_path}.lx.tgz | tar -", f"{req_path}.lx.tgz"),
+            # (f"cd {HPC_REF} && pigz -dc {req_path}.tar.gz | tar -xf -", f"{req_path}.tar.gz"),
+            (f"cd {HPC_REF} && pigz -dc {req_path}.lx.tgz | tar -xf -", f"{req_path}.lx.tgz"),
             (f"cp -r {req_path} {HPC_REF}", req_path),
         ]:
             if not os.path.exists(req): continue
