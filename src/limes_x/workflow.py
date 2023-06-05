@@ -434,7 +434,6 @@ class WorkflowState(PrivateInit):
             # print(f"{module.name} {len(instances)}")
             for space in instances:
                 signature = self._get_signature(module.name, list(space.values()))
-                print(signature)
                 if signature in self._job_signatures: continue
                 # print(module.name, space)
 

@@ -3,7 +3,7 @@ from pathlib import Path
 import limes_x as lx
 from limes_x.presets.slurm import Run
 
-modules = []
+modules: list[lx.ComputeModule] = []
 modules += lx.LoadComputeModules("../../Limes-compute-modules/logistics")
 modules += lx.LoadComputeModules("../../Limes-compute-modules/metagenomics")
 
