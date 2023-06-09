@@ -710,9 +710,9 @@ class Workflow:
         self._solver = DependencySolver([c.GetTransform() for c in compute_modules])
         self._all_modules = compute_modules
 
-    def Setup(self, install_type: str):
+    def Setup(self, install_type: str, threads: int=1):
         for step in self._compute_modules:
-            step.Setup(self._reference_folder, install_type)
+            step.Setup(self._reference_folder, install_type, threads=threads)
 
     def _calculate(self, given: Iterable[Item], targets: Iterable[Item]):
         given_k = {x.key for x in given}
