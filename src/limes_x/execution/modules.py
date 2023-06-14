@@ -103,7 +103,6 @@ class JobContext(AutoPopulate):
     output_folder: Path
     manifest: dict[Item, str|Path|list[str|Path]]
     job_id: str
-    ref: Path
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -144,7 +143,6 @@ class JobContext(AutoPopulate):
                     'params': lambda: Params.FromDict(v),
                     'manifest': lambda: _dict2manifest(v),
                     'output_folder': lambda: Path(v),
-                    'ref': lambda: Path(v),
                 }.get(k, lambda: str(v))()
                 kwargs[k] = v
             if 'output_folder' not in d:
@@ -225,12 +223,12 @@ class ComputeModule(PrivateInit):
         self.memory_gb = memory_gb
         self.requirements = requirements
 
-    def Setup(self, reference_folder: Path, install_type: str):
+    def Setup(self, reference_folder: Path, install_type: str, threads: int=1):
         snakefile = f"{self.location}/setup/setup.smk"
         print(f'setup {self.name} {">"*(50-len(self.name))}')
         if os.path.exists(snakefile):
             LiveShell(f"""\
-                snakemake --cores 1 --snakefile {snakefile} --directory {reference_folder} {install_type}
+                snakemake --cores {threads} --snakefile {snakefile} --directory {reference_folder} {install_type}
             """.replace('  ', ''), echo_cmd=False)
         else:
             print("no setup defined")

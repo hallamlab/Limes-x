@@ -1,0 +1,4 @@
+#!/home/tony/Utilities/mambaforge/envs/p310/bin/python
+
+import os, sys
+print(f"mock sacct")
