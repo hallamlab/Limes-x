@@ -4,6 +4,8 @@ __pycache__
 
 /scratch
 /secrets
+/data/*
+!/data/test_data
 
 # Distribution / packaging
 .Python
