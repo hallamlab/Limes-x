@@ -21,7 +21,7 @@ class KeyGenerator:
         # vocab += [c for c in "+="]
         self.vocab = vocab
 
-    def GenerateUID(self, l:int=12, prefix: str="", blacklist: set[str]=set()) -> str:
+    def GenerateUID(self, l:int=8, prefix: str="", blacklist: set[str]=set()) -> str:
         key: str|None = None
         while key is None or key in blacklist:
             digits = np.random.randint(0, len(self.vocab), l)
