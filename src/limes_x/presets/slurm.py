@@ -102,6 +102,9 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
             "taxonomy_on_assembly":     lambda: (2, 4,  60),
             "checkm_on_bin":            lambda: (cores, 2,  mem),
             "annotation_metapathways":  lambda: (cores, 16,  mem),
+            "annotation_eggnog":        lambda: (cores, 16,  mem),
+            "annotation_mobileogdb":    lambda: (cores, 4,  mem),
+            "orf_prediction":           lambda: (cores, 2,  mem),
         }.get(job, lambda: (cores, 4, mem))()
 
         _hrs = int(_time)
@@ -190,7 +193,7 @@ def Run(
     def _ok_for_path(c: str):
         return c.isalpha() or c.isdigit() or c in "-_"
     if name is not None: name = "".join([c if _ok_for_path(c) else "_" for c in name])
-
+    OUT_LOG = "slurm.cmd"
     workspace = Path(os.path.abspath(workspace))
     if continue_from is None:
         now = datetime.now() 
@@ -204,6 +207,21 @@ def Run(
         run_name = continue_from.split(".")[1]
         run_id = run_name.split("-")[0]
         date_time = continue_from.split(".")[0]
+
+        i = 0    
+        while True:
+            i += 1
+            prev_cache = run_folder.joinpath(f"prev{i:03}")
+            if not prev_cache.exists(): break
+        os.makedirs(prev_cache)
+        prev_name = prev_cache.name
+        os.system(f"""\
+            cd {run_folder}
+            mv {OUT_LOG} {prev_name}/
+            mv slurm_stats.txt {prev_name}/
+            mv slurm_context.json {prev_name}/ 
+            ls | grep .out | grep slurm- | xargs -I % mv % {prev_name}/
+        """)
 
     def _parse_given(g: InputGroup):
         children = {}
@@ -236,17 +254,16 @@ def Run(
         json.dump(context, f, indent=4)
 
     os.chdir(run_folder)
-    out_log = "slurm.cmd"
     cmd = f"""\
     sbatch --account={allocation} \
         --job-name="{run_name}" \
         --nodes=1 --ntasks=1 --error slurm.err --output slurm.out \
         --cpus-per-task=1 --mem=4G --time={time} \
-        --wrap="python {SCRIPT} {_INNER} {run_folder}" >> {out_log}
+        --wrap="python {SCRIPT} {_INNER} {run_folder}" >> {OUT_LOG}
     """.replace("  ", "")
-    with open(out_log, "w") as log:
+    with open(OUT_LOG, "w") as log:
         log.write(cmd+"\n")
     os.system(cmd)
-    with open(out_log, "r+") as log:
+    with open(OUT_LOG, "r+") as log:
         for l in log:
             print(l, end="")

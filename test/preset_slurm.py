@@ -19,7 +19,7 @@ Run(
         lx.Item('reads taxonomy table'),
         lx.Item('bin taxonomy table'),
         lx.Item('assembly taxonomy table'),
-        lx.Item('genomic annotation'),
+        lx.Item('annotation by metapathways'),
     ],
     given=[
         lx.InputGroup(  
