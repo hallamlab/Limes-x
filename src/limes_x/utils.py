@@ -15,10 +15,10 @@ class PrivateInit:
         if _key != self._initializer_key: raise PrivateInitException
 
 class KeyGenerator:
-    def __init__(self) -> None:
+    def __init__(self, full=False) -> None:
         ascii_vocab = [(48, 57), (65, 90), (97, 122)]
         vocab = [chr(i) for g in [range(a, b+1) for a, b in ascii_vocab] for i in g]
-        # vocab += [c for c in "+="]
+        if full: vocab += [c for c in "+="]
         self.vocab = vocab
 
     def GenerateUID(self, l:int=8, prefix: str="", blacklist: set[str]=set()) -> str:
@@ -28,6 +28,18 @@ class KeyGenerator:
             key = prefix+"".join([self.vocab[i] for i in digits])
         blacklist.add(key)
         return key
+    
+    def FromInt(self, i: int, l: int=8, little_endian=True):
+        chunks = ['0']*l
+        place = 0
+        while i > 0:
+            assert place < l
+            chunk_k = i % len(self.vocab)
+            i = (i - chunk_k) // len(self.vocab)
+            chunks[place] = self.vocab[chunk_k]
+            place += 1
+        if not little_endian: chunks.reverse()
+        return "".join(chunks)
     
 class StdTime:
     FORMAT = '%Y-%m-%d_%H-%M-%S'

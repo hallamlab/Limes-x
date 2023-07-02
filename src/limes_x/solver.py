@@ -1,25 +1,34 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+import os, sys
 from typing import Any, Iterable, Literal
 import hashlib
+import numpy as np
+import json
 from collections import deque
+
+from limes_x.utils import KeyGenerator
 
 class Namespace:
     def __init__(self) -> None:
         self.node_signatures: dict[int, str] = {}
         self._last_k: int = 0
+        self._kg = KeyGenerator(True)
+        self._KLEN = 4
+        self._MAX_K = len(self._kg.vocab)**self._KLEN
 
     def NewKey(self):
         self._last_k += 1
-        return self._last_k
+        assert self._last_k < self._MAX_K
+        return self._last_k, self._kg.FromInt(self._last_k, self._KLEN)
 
 class Hashable:
     def __init__(self, ns: Namespace) -> None:
         self.namespace = ns
-        self.key = ns.NewKey()
+        self.hash, self.key = ns.NewKey()
 
     def __hash__(self) -> int:
-        return self.key
+        return self.hash
     
     def __eq__(self, __value: object) -> bool:
         K = "key"
@@ -36,33 +45,33 @@ class Node(Hashable):
         self.namespace = ns
         self.properties = properties
         self.parents = parents
-        self._diffs = set()
-        self._sames = set()
+        # self._diffs = set()
+        # self._sames = set()
 
     def __str__(self) -> str:
         return f"<{self.key}:{','.join(self.properties)}>"
 
     def __repr__(self) -> str:
         return f"{self}"
-
-    def IsA(self, other: Node) -> bool:
-        if other.key in self._diffs: return False
-        if other.key in self._sames: return True
+    
+    def IsA(self, other: Node, compare_lineage=False) -> bool:
+        # if other.key in self._diffs: return False
+        # if other.key in self._sames: return True
         if not other.properties.issubset(self.properties):
-            self._diffs.add(other.key)
+            # self._diffs.add(other.key)
             return False
-        self._sames.add(other.key)
-        # if not other.parents.issubset(self.parents): return False
+        # self._sames.add(other.key)
+        if compare_lineage: return not other.parents.issubset(self.parents)
         return True
 
     def Signature(self):
         cache = self.namespace.node_signatures
         if self.key not in cache:
-            props = "".join(sorted(self.properties))
-            parents = "".join(sorted([f">{p.Signature()}" for p in self.parents]))
-            sig = props+parents
-            cache[self.key] = sig
-        return cache[self.key]
+            props = ",".join(sorted(self.properties))
+            parents = ",".join(sorted([p.Signature() for p in self.parents]))
+            sig = f"{props}-{parents}"
+            cache[self.hash] = sig
+        return cache[self.hash]
 
     def MatchesMemberOf(self, collection: Iterable[Node]):
         return any(self == m for m in collection)
@@ -83,6 +92,7 @@ class Transform(Hashable):
         self._ns = ns
         self._input_group_map: dict[int, list[Dependency]] = {}
         self._key = ns.NewKey()
+        self._seen: set[str] = set()
 
     def __str__(self) -> str:
         def _props(d: Dependency):
@@ -111,15 +121,20 @@ class Transform(Hashable):
         return _dep
 
     def _sig(self, endpoints: Iterable[Endpoint]):
-        return "".join(f'!{e.key}' for e in endpoints)
+        # return "".join(e.key for e in endpoints)
+        return self.key+"-"+ "".join(e.key for e in endpoints)
 
-    def Apply(self, have: Iterable[Endpoint], blacklist: set[str]) -> list[Application]:
+    def Possibilities(self, have: Iterable[Endpoint]):
         matches: list[list[Endpoint]] = []
-
         for req in self.requires:
             _m = [m for m in have if m.IsA(req)]
             if len(_m) == 0: return []
             matches.append(_m)
+        return matches
+
+    def Apply(self, have: Iterable[Endpoint], use_signatures: set[str]) -> Iterable[Application]:
+        matches = self.Possibilities(have)
+        if len(matches) == 0: return []
 
         # can reduce exponential trial here by enforcning the input groups first
         def _possible_configs(i: int, choosen: list[Endpoint]) -> list[list[Endpoint]]:
@@ -142,103 +157,91 @@ class Transform(Hashable):
             return configs
         configs = _possible_configs(0, [])
 
-        applications: list[Application] = []
+        def _same(a: Endpoint, b: Endpoint):
+            return a.properties.issubset(b.properties) and b.properties.issubset(a.properties) \
+                and a.parents.issubset(b.parents) and b.parents.issubset(a.parents)
+
         for input_set in configs:
             sis = set(input_set)
             sig = self._sig(input_set)
-            if sig in blacklist: continue
+            if sig in use_signatures: continue
             _parents = sis|{p for g in [e.parents for e in input_set] for p in g}
-            produced = [
+            produced = {
                 Endpoint(
                     namespace=self._ns,
                     properties=out.properties,
                     parents=_parents
                 )
-            for out in self.produces]
-            applications.append(Application(self, sis, produced, sig))
-        return applications
+            for out in self.produces}
+            # if all(_same(e, p) for e in have for p in produced):
+            #     continue
+            #     print(have)
+            #     print(produced)
+            #     print()
+            yield Application(self, sis, produced, sig)
 
 @dataclass
 class Application:
     transform: Transform
     used: set[Endpoint]
-    produced: list[Endpoint]
+    produced: set[Endpoint]
     signature: str
 
 @dataclass
 class Result:
     solution: list[Application]
     message: str = ""
-    evidence: Any = None
+    info: Any = None
     steps: int = 0
-
+    success: bool = False
+    
 def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Transform]):
     @dataclass
     class State:
-        have: list[Endpoint]
-        usage_signatures: dict[int, set[str]]
+        have: set[Endpoint]
         plan: list[Application]
+        usage_sigs: set[str]
 
-    transforms = list(transforms)
+    def _get_next_states(curr: State):
+        for tr in transforms:
+            for appl in tr.Apply(curr.have, curr.usage_sigs):
+                yield State(
+                    have = curr.have|appl.produced,
+                    plan = curr.plan + [appl],
+                    usage_sigs = curr.usage_sigs|{appl.signature},
+                )
     
-    def _done(state: State):
-        appl = target.Apply(state.have, set())
-        return appl 
+    def _check_done(curr: State):
+        appls = target.Apply(curr.have, set())
+        for a in appls:
+            return a
+    
+    MAX_S = 100_000
+    MAX_D = 32
+    steps = 0
+    def _solve(curr: State, depth: int, depth_lim: int) -> Result:
+        nonlocal steps
+        if depth>=MAX_D: return Result([], f"depth limit: {depth}")
+        steps += 1
+        if steps>MAX_S: return Result([], f"step limit: {steps}", curr, steps)
 
-    def _solve() -> Result:
-        MAXS = 2_000
-        todo: deque[State] = deque([State(
-            have = list(given),
-            plan = [],
-            usage_signatures={},
-        )], maxlen=MAXS)
+        final_appl = _check_done(curr)
+        if final_appl is not None: return Result(curr.plan+[final_appl], steps=steps, success=True)
 
-        def _deduplicate_states(current: State):
-            def _get_sig(s: State):
-                rsig = ''.join(f"{k}{''.join(v)}" for k, v in s.usage_signatures.items())
-                sig = int(hashlib.md5(rsig.encode("latin1")).hexdigest(), 16)
-                return sig
-            seen = {_get_sig(current)}
-            new_todo: deque[State] = deque([], MAXS)
-            for s in todo:
-                if _get_sig(s) in seen: continue
-                new_todo.append(s)
-            return new_todo
-        
-        _steps = 0
-        _last_depth = 0
-        _empty = set()
-        while len(todo)>0:
-            _steps += 1
-            _s = todo.popleft()
-            _depth = len(_s.plan)
-            if _depth != _last_depth:
-                todo = _deduplicate_states(_s)
-                _last_depth = _depth
-            if _steps > MAXS: return Result([], f"step limit exceeded", evidence=todo, steps=_steps)
-            
-            _target_applications = target.Apply(_s.have, _empty)
-            if len(_target_applications)>0:
-                return Result(solution=_s.plan+[_target_applications[0]], steps=_steps)
-
-            if _done(_s): return Result(_s.plan, steps=_steps)
-            for tr in transforms:
-                possibilities = tr.Apply(_s.have, _s.usage_signatures.get(tr.key, set()))
-                if len(possibilities) == 0: continue
-                sigs = _s.usage_signatures.copy()
-                new_have = _s.have.copy()
-                for app in possibilities: # aggregate possiblities
-                    sigs[tr.key] = sigs.get(tr.key, set())|{app.signature}
-                    new_have += app.produced
-
-                todo.append(State(
-                    have = new_have,
-                    plan = _s.plan+possibilities,
-                    usage_signatures=sigs
-                ))
-        return Result([], f"ran out of things to try", steps = _steps)
-
-    res = _solve()
+        for n in _get_next_states(curr):
+            res = _solve(n, depth+1, depth_lim)
+            if res.success: return res
+        return Result([], "no sol", curr, steps)
+    
+    start = State(set(given), [], set())
+    res = _solve(start, 0, MAX_D)
+    # while res.success:
+    #     _res = _solve(start, 0, len(res.solution))
+    #     # _res = _solve(start, 0, 6)
+    #     if not _res.success:
+    #         print("no futher opt")
+    #         break
+    #     res = _res
     sol = res.solution
     last_l = 0
     while last_l != len(sol):
@@ -249,42 +252,3 @@ def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Tra
         sol = [a for a in sol if a.transform==target or any(e in used for e in a.produced)]
     res.solution = sol
     return res
-
-#############################
-## example
-
-# NS = Namespace()
-# def _set(s: str):
-#     return set(s.split(", "))
-
-# anner = Transform(NS)
-# anner.AddRequirement(_set("annable"))
-# anner.AddProduct(_set("ann"))
-
-# taxer = Transform(NS)
-# taxer.AddRequirement(_set("taxable"))
-# taxer.AddProduct(_set("tax"))
-
-# sumer = Transform(NS)
-# d_parent = sumer.AddRequirement(_set("annable, taxable"))
-# d_ann = sumer.AddRequirement(_set("ann"), {d_parent})
-# d_tax = sumer.AddRequirement(_set("tax"), {d_parent})
-# sumer.AddProduct(_set("sum"))
-
-# M, N = 3, 1
-# haves = [Endpoint(NS, _set(f"{i+1}, annable, taxable")) for i in range(M)]
-
-# target = Transform(NS)
-# for e in haves[:N]:
-#     de = target.AddRequirement(e.properties)
-#     target.AddRequirement(_set("sum"), {de})
-
-# test_have = []
-# for b in haves[:N]:
-#     test_have.append(b)
-#     test_have.append(Endpoint(NS, _set("ann"), {b}))
-#     test_have.append(Endpoint(NS, _set("tax"), {b}))
-
-# print("Start")
-# r = Solve(haves, target, tr)
-# f"input size [{N}], states checked [{r.steps}], {r.message}, {len(target.requires)}"
