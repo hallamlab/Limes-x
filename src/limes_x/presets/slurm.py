@@ -168,7 +168,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
         f.writelines(log_entries)
 
     for id in slurm_ids:
-        os.system(f"""rm {WS.joinpath(f"/slurm-{id}.out")}""")
+        os.system(f"""rm {WS.joinpath(f"slurm-{id}.out")}""")
     os.system(f"rm {slurm_temp}")
 
 #########################################################################################
