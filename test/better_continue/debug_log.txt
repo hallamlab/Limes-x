@@ -1,0 +1,1300 @@
+>>>00 {1-reads},{sum},{reads-2},{sum},{3-reads},{sum}-> {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+ -> (D:1-reads) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+    ^candidate (J000:1-reads) (D:1-reads) set()
+    ^reqs.     {}
+ <- (D:1-reads) 1 sol. (J000:1-reads)
+ -> (D:sum) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>01 {annable-taxable},{ann},{tax}->{sum} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+ -> (D:annable-taxable) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>02 {reads}->{annable-taxable} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+ -> (D:reads) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+    ^candidate (J000:1-reads) (D:1-reads) set()
+    ^reqs.     {}
+    ^candidate (K000:reads-2) (D:reads-2) set()
+    ^reqs.     {}
+    ^candidate (L000:3-reads) (D:3-reads) set()
+    ^reqs.     {}
+    ^candidate (M000:reads-4) (D:reads-4) set()
+    ^reqs.     {}
+    ^candidate (N000:5-reads) (D:5-reads) set()
+    ^reqs.     {}
+ <- (D:reads) 5 sol. (J000:1-reads)
+<<<02 {reads}->{annable-taxable} {}
+      [5]
+    # {}
+    . 1
+           {}
+    ___ (D:reads) set()
+        __ (J000:1-reads) []
+    ___ KEPT
+    . 2
+           {}
+    ___ (D:reads) set()
+        __ (K000:reads-2) []
+    ___ KEPT
+    . 3
+           {}
+    ___ (D:reads) set()
+        __ (L000:3-reads) []
+    ___ KEPT
+    . 4
+           {}
+    ___ (D:reads) set()
+        __ (M000:reads-4) []
+    ___ KEPT
+    . 5
+           {}
+    ___ (D:reads) set()
+        __ (N000:5-reads) []
+    ___ KEPT
+      5 sol. {(d000:annable-taxable): (D:annable-taxable)}
+ <- (D:annable-taxable) 5 sol. (d000:annable-taxable)
+ -> (D:ann) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>02 {annable}->{ann} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+ -> (D:annable) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>03 {reads}->{annable-taxable} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+<<<03 CACHED: 5 solutions
+ <- (D:annable) 5 sol. (d000:annable-taxable)
+<<<02 {annable}->{ann} {}
+      [5]
+    # {}
+    . 1
+           {}
+    ___ (D:annable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+    ___ KEPT
+    . 2
+           {}
+    ___ (D:annable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+    ___ KEPT
+    . 3
+           {}
+    ___ (D:annable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+    ___ KEPT
+    . 4
+           {}
+    ___ (D:annable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+    ___ KEPT
+    . 5
+           {}
+    ___ (D:annable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+    ___ KEPT
+      5 sol. {(i000:ann): (D:ann)}
+ <- (D:ann) 5 sol. (i000:ann)
+ -> (D:tax) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>02 {taxable}->{tax} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+ -> (D:taxable) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>03 {reads}->{annable-taxable} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+<<<03 CACHED: 5 solutions
+ <- (D:taxable) 5 sol. (d000:annable-taxable)
+<<<02 {taxable}->{tax} {}
+      [5]
+    # {}
+    . 1
+           {}
+    ___ (D:taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+    ___ KEPT
+    . 2
+           {}
+    ___ (D:taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+    ___ KEPT
+    . 3
+           {}
+    ___ (D:taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+    ___ KEPT
+    . 4
+           {}
+    ___ (D:taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+    ___ KEPT
+    . 5
+           {}
+    ___ (D:taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+    ___ KEPT
+      5 sol. {(n000:tax): (D:tax)}
+ <- (D:tax) 5 sol. (n000:tax)
+<<<01 {annable-taxable},{ann},{tax}->{sum} {}
+      [5, 5, 5]
+    # {}
+    . 1
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (d000:annable-taxable), (D:ann): (i000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (n000:tax) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:taxable))]
+    ___ KEPT
+    . 2
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (e000:annable-taxable)
+    . 3
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (f000:annable-taxable)
+    . 4
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (g000:annable-taxable)
+    . 5
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (h000:annable-taxable)
+    . 6
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (d000:annable-taxable)
+    . 7
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (e000:annable-taxable), (D:ann): (j000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (n000:tax) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (e000:annable-taxable)
+    . 8
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (f000:annable-taxable)
+    . 9
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (g000:annable-taxable)
+    . 10
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (h000:annable-taxable)
+    . 11
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (d000:annable-taxable)
+    . 12
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (e000:annable-taxable)
+    . 13
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (f000:annable-taxable), (D:ann): (k000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (n000:tax) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (f000:annable-taxable)
+    . 14
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (g000:annable-taxable)
+    . 15
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (h000:annable-taxable)
+    . 16
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (d000:annable-taxable)
+    . 17
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (e000:annable-taxable)
+    . 18
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (f000:annable-taxable)
+    . 19
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (g000:annable-taxable), (D:ann): (l000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (n000:tax) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (g000:annable-taxable)
+    . 20
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (h000:annable-taxable)
+    . 21
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (d000:annable-taxable)
+    . 22
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (e000:annable-taxable)
+    . 23
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (f000:annable-taxable)
+    . 24
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (g000:annable-taxable)
+    . 25
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (h000:annable-taxable), (D:ann): (m000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (n000:tax) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (h000:annable-taxable)
+    . 26
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (d000:annable-taxable), (D:ann): (i000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (o000:tax) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (d000:annable-taxable)
+    . 27
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (e000:annable-taxable)
+    . 28
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (f000:annable-taxable)
+    . 29
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (g000:annable-taxable)
+    . 30
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (h000:annable-taxable)
+    . 31
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (d000:annable-taxable)
+    . 32
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (e000:annable-taxable), (D:ann): (j000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (o000:tax) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:taxable))]
+    ___ KEPT
+    . 33
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (f000:annable-taxable)
+    . 34
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (g000:annable-taxable)
+    . 35
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (h000:annable-taxable)
+    . 36
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (d000:annable-taxable)
+    . 37
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (e000:annable-taxable)
+    . 38
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (f000:annable-taxable), (D:ann): (k000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (o000:tax) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (f000:annable-taxable)
+    . 39
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (g000:annable-taxable)
+    . 40
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (h000:annable-taxable)
+    . 41
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (d000:annable-taxable)
+    . 42
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (e000:annable-taxable)
+    . 43
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (f000:annable-taxable)
+    . 44
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (g000:annable-taxable), (D:ann): (l000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (o000:tax) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (g000:annable-taxable)
+    . 45
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (h000:annable-taxable)
+    . 46
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (d000:annable-taxable)
+    . 47
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (e000:annable-taxable)
+    . 48
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (f000:annable-taxable)
+    . 49
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (g000:annable-taxable)
+    . 50
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (h000:annable-taxable), (D:ann): (m000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (o000:tax) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (h000:annable-taxable)
+    . 51
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (d000:annable-taxable), (D:ann): (i000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (p000:tax) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (d000:annable-taxable)
+    . 52
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (e000:annable-taxable)
+    . 53
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (f000:annable-taxable)
+    . 54
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (g000:annable-taxable)
+    . 55
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (h000:annable-taxable)
+    . 56
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (d000:annable-taxable)
+    . 57
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (e000:annable-taxable), (D:ann): (j000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (p000:tax) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (e000:annable-taxable)
+    . 58
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (f000:annable-taxable)
+    . 59
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (g000:annable-taxable)
+    . 60
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (h000:annable-taxable)
+    . 61
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (d000:annable-taxable)
+    . 62
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (e000:annable-taxable)
+    . 63
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (f000:annable-taxable), (D:ann): (k000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (p000:tax) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:taxable))]
+    ___ KEPT
+    . 64
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (g000:annable-taxable)
+    . 65
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (h000:annable-taxable)
+    . 66
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (d000:annable-taxable)
+    . 67
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (e000:annable-taxable)
+    . 68
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (f000:annable-taxable)
+    . 69
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (g000:annable-taxable), (D:ann): (l000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (p000:tax) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (g000:annable-taxable)
+    . 70
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (h000:annable-taxable)
+    . 71
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (d000:annable-taxable)
+    . 72
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (e000:annable-taxable)
+    . 73
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (f000:annable-taxable)
+    . 74
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (g000:annable-taxable)
+    . 75
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (h000:annable-taxable), (D:ann): (m000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (p000:tax) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (h000:annable-taxable)
+    . 76
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (d000:annable-taxable), (D:ann): (i000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (q000:tax) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (d000:annable-taxable)
+    . 77
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (e000:annable-taxable)
+    . 78
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (f000:annable-taxable)
+    . 79
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (g000:annable-taxable)
+    . 80
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (h000:annable-taxable)
+    . 81
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (d000:annable-taxable)
+    . 82
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (e000:annable-taxable), (D:ann): (j000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (q000:tax) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (e000:annable-taxable)
+    . 83
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (f000:annable-taxable)
+    . 84
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (g000:annable-taxable)
+    . 85
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (h000:annable-taxable)
+    . 86
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (d000:annable-taxable)
+    . 87
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (e000:annable-taxable)
+    . 88
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (f000:annable-taxable), (D:ann): (k000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (q000:tax) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (f000:annable-taxable)
+    . 89
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (g000:annable-taxable)
+    . 90
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (h000:annable-taxable)
+    . 91
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (d000:annable-taxable)
+    . 92
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (e000:annable-taxable)
+    . 93
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (f000:annable-taxable)
+    . 94
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (g000:annable-taxable), (D:ann): (l000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (q000:tax) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:taxable))]
+    ___ KEPT
+    . 95
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (h000:annable-taxable)
+    . 96
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (d000:annable-taxable)
+    . 97
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (e000:annable-taxable)
+    . 98
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (f000:annable-taxable)
+    . 99
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (g000:annable-taxable)
+    . 100
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (h000:annable-taxable), (D:ann): (m000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (q000:tax) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (h000:annable-taxable)
+    . 101
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (d000:annable-taxable), (D:ann): (i000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (r000:tax) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (d000:annable-taxable)
+    . 102
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (e000:annable-taxable)
+    . 103
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (f000:annable-taxable)
+    . 104
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (g000:annable-taxable)
+    . 105
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (i000:ann) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (d000:annable-taxable) (h000:annable-taxable)
+    . 106
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (d000:annable-taxable)
+    . 107
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (e000:annable-taxable), (D:ann): (j000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (r000:tax) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (e000:annable-taxable)
+    . 108
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (f000:annable-taxable)
+    . 109
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (g000:annable-taxable)
+    . 110
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (j000:ann) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (e000:annable-taxable) (h000:annable-taxable)
+    . 111
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (d000:annable-taxable)
+    . 112
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (e000:annable-taxable)
+    . 113
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (f000:annable-taxable), (D:ann): (k000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (r000:tax) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (f000:annable-taxable)
+    . 114
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (g000:annable-taxable)
+    . 115
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (k000:ann) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (f000:annable-taxable) (h000:annable-taxable)
+    . 116
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (d000:annable-taxable)
+    . 117
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (e000:annable-taxable)
+    . 118
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (f000:annable-taxable)
+    . 119
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (g000:annable-taxable), (D:ann): (l000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (r000:tax) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:taxable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (g000:annable-taxable)
+    . 120
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (l000:ann) [((M000:reads-4), (D:reads)), ((g000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (g000:annable-taxable) (h000:annable-taxable)
+    . 121
+           {}
+    ___ (D:annable-taxable) set()
+        __ (d000:annable-taxable) [((J000:1-reads), (D:reads))]
+           {(D:annable-taxable): (d000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (d000:annable-taxable)
+    . 122
+           {}
+    ___ (D:annable-taxable) set()
+        __ (e000:annable-taxable) [((K000:reads-2), (D:reads))]
+           {(D:annable-taxable): (e000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (e000:annable-taxable)
+    . 123
+           {}
+    ___ (D:annable-taxable) set()
+        __ (f000:annable-taxable) [((L000:3-reads), (D:reads))]
+           {(D:annable-taxable): (f000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (f000:annable-taxable)
+    . 124
+           {}
+    ___ (D:annable-taxable) set()
+        __ (g000:annable-taxable) [((M000:reads-4), (D:reads))]
+           {(D:annable-taxable): (g000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+    ___ FAIL: lineage mismatch (h000:annable-taxable) (g000:annable-taxable)
+    . 125
+           {}
+    ___ (D:annable-taxable) set()
+        __ (h000:annable-taxable) [((N000:5-reads), (D:reads))]
+           {(D:annable-taxable): (h000:annable-taxable)}
+    ___ (D:ann) {(D:annable-taxable)}
+        __ (m000:ann) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:annable))]
+           {(D:annable-taxable): (h000:annable-taxable), (D:ann): (m000:ann)}
+    ___ (D:tax) {(D:annable-taxable)}
+        __ (r000:tax) [((N000:5-reads), (D:reads)), ((h000:annable-taxable), (D:taxable))]
+    ___ KEPT
+      5 sol. {(s000:sum): (D:sum)}
+ <- (D:sum) 1 sol. (s000:sum)
+ -> (D:reads-2) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+    ^candidate (K000:reads-2) (D:reads-2) set()
+    ^reqs.     {}
+ <- (D:reads-2) 1 sol. (K000:reads-2)
+ -> (D:sum) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>01 {annable-taxable},{ann},{tax}->{sum} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+<<<01 CACHED: 5 solutions
+ <- (D:sum) 1 sol. (t000:sum)
+ -> (D:3-reads) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+    ^candidate (L000:3-reads) (D:3-reads) set()
+    ^reqs.     {}
+ <- (D:3-reads) 1 sol. (L000:3-reads)
+ -> (D:sum) {}
+    dict_keys([(J000:1-reads), (K000:reads-2), (L000:3-reads), (M000:reads-4), (N000:5-reads)])
+>>>01 {annable-taxable},{ann},{tax}->{sum} {}
+       (J000:1-reads)
+       (K000:reads-2)
+       (L000:3-reads)
+       (M000:reads-4)
+       (N000:5-reads)
+<<<01 CACHED: 5 solutions
+ <- (D:sum) 1 sol. (u000:sum)
+<<<00 {1-reads},{sum},{reads-2},{sum},{3-reads},{sum}-> {}
+      [1, 1, 1, 1, 1, 1]
+    # {}
+    . 1
+           {}
+    ___ (D:1-reads) set()
+        __ (J000:1-reads) []
+           {(D:1-reads): (J000:1-reads)}
+    ___ (D:sum) {(D:1-reads)}
+        __ (s000:sum) [((J000:1-reads), (D:reads)), ((d000:annable-taxable), (D:annable-taxable)), ((i000:ann), (D:ann)), ((n000:tax), (D:tax))]
+           {(D:1-reads): (J000:1-reads), (D:sum): (s000:sum)}
+    ___ (D:reads-2) set()
+        __ (K000:reads-2) []
+           {(D:1-reads): (J000:1-reads), (D:sum): (s000:sum), (D:reads-2): (K000:reads-2)}
+    ___ (D:sum) {(D:reads-2)}
+        __ (t000:sum) [((K000:reads-2), (D:reads)), ((e000:annable-taxable), (D:annable-taxable)), ((j000:ann), (D:ann)), ((o000:tax), (D:tax))]
+           {(D:1-reads): (J000:1-reads), (D:sum): (s000:sum), (D:reads-2): (K000:reads-2), (D:sum): (t000:sum)}
+    ___ (D:3-reads) set()
+        __ (L000:3-reads) []
+           {(D:1-reads): (J000:1-reads), (D:sum): (s000:sum), (D:reads-2): (K000:reads-2), (D:sum): (t000:sum), (D:3-reads): (L000:3-reads)}
+    ___ (D:sum) {(D:3-reads)}
+        __ (u000:sum) [((L000:3-reads), (D:reads)), ((f000:annable-taxable), (D:annable-taxable)), ((k000:ann), (D:ann)), ((p000:tax), (D:tax))]
+    ___ KEPT
+      1 sol. {}
