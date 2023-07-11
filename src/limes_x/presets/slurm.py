@@ -62,6 +62,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
     run_id: str = CONTEXT["run_id"]
     allocation: str = CONTEXT["allocation"]
     module_locations = CONTEXT["modules"]
+    job_times: dict = CONTEXT["job_times"]
     modules = [lx.ComputeModule._load(p) for p in module_locations]
     reference_folder: Path = CONTEXT["reference_folder"]
     given: Iterable[lx.InputGroup] = [_parse_given(g) for g in CONTEXT["given"]]
@@ -80,6 +81,13 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
             hrs = min(hrs, 48)
             return 4, hrs, 60 # max mem for 2 jobs/most common node
 
+        def _annot_mp3():
+            bins = manifest.get(Item('metagenomic bin'), [])
+            if not isinstance(bins, list): bins = [bins]
+            hrs = (0.25*len(bins)) + 1 # 15mins/bin + 1hr grace
+            hrs = min(hrs, 16)
+            return cores, hrs, mem 
+        
         def _asm():
             rpaths = manifest.get(Item('metagenomic gzipped reads'), [])
             if not isinstance(rpaths, list): rpaths = [rpaths]
@@ -101,7 +109,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
             "taxonomy_on_bin":          _tax_bin,
             "taxonomy_on_assembly":     lambda: (2, 4,  60),
             "checkm_on_bin":            lambda: (cores, 2,  mem),
-            "annotation_metapathways":  lambda: (cores, 16,  mem),
+            "annotation_metapathways":  _annot_mp3,
             "annotation_eggnog":        lambda: (cores, 16,  mem),
             "annotation_mobileogdb":    lambda: (cores, 4,  mem),
             "orf_prediction":           lambda: (cores, 2,  mem),
@@ -115,13 +123,15 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
     def slurm(job: lx.Job) -> tuple[bool, str]:
         p = job.context.params
         time.sleep(10*random.random())
-        cores, time_str, mem = get_res(job.instance.step.name, job.context.manifest, p.threads, p.mem_gb)
+        job_name = job.instance.step.name
+        cores, time_str, mem = get_res(job_name, job.context.manifest, p.threads, p.mem_gb)
+        time_str = job_times.get(job_name, time_str)
         p.threads = cores
         p.mem_gb = mem
         job.SaveContext()
         return job.Shell(f"""\
             sbatch --wait --account={allocation} \
-                --job-name="{run_id}-{job.instance.step.name}:{job.instance.GetID()}" \
+                --job-name="{run_id}-{job_name}:{job.instance.GetID()}" \
                 --nodes=1 --ntasks=1 \
                 --cpus-per-task={cores} --mem={mem}G --time={time_str} \
                 --wrap="{job.run_command}"\
@@ -187,6 +197,7 @@ def Run(
     given: Iterable[InputGroup],
     allocation: str,
     time: str="48:00:00",
+    job_times: dict = dict(),
     name: str|None=None,
     continue_from: str|None=None,
 ):
@@ -250,6 +261,7 @@ def Run(
             reference_folder = reference_folder,
             given = [_parse_given(g) for g in given],
             targets = [t if isinstance(t, str) else t.key for t in  targets],
+            job_times = job_times,
         )
         json.dump(context, f, indent=4)
 
