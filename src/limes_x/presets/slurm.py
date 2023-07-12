@@ -122,7 +122,7 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
 
     def slurm(job: lx.Job) -> tuple[bool, str]:
         p = job.context.params
-        time.sleep(10*random.random())
+        time.sleep(10*random.random()+10)
         job_name = job.instance.step.name
         cores, time_str, mem = get_res(job_name, job.context.manifest, p.threads, p.mem_gb)
         time_str = job_times.get(job_name, time_str)
