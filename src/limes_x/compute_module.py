@@ -3,8 +3,22 @@ from typing import Callable, Any
 from pathlib import Path
 import importlib
 
+from .models import Namespace, Dependency, Transform
+
+# --------------------------------------------------
+# meant for external use such as module definitions
+# or starting workflows
+
+def LazySet(properties: str):
+    """@properties will be split using ', '"""
+    return set(properties.split(", "))
+
+def CreateTransform():
+    return Transform(Namespace())
+# --------------------------------------------------
+
 class ExecutionContext:
-    def __init__(self, manifest: dict[str, Any], output_folder: Path, shell: Callable[[str], bool]) -> None:
+    def __init__(self, manifest: dict[Dependency, Any], output_folder: Path, shell: Callable[[str], bool]) -> None:
         self.manifest = manifest
         self.output_folder = output_folder
         self._shell = shell
@@ -28,20 +42,11 @@ class ComputeModule:
             import definition as mo # type: ignore
             importlib.reload(mo)
 
-            ATTRIBUTES = ["REQUIRES", "PRODUCES", "Procedure"]
+            ATTRIBUTES = ["ME", "PRODUCES", "Procedure"]
             for a in ATTRIBUTES:
-                assert hasattr(mo, a), f"global variable [{a}] not found"
+                assert hasattr(mo, a), f"global variable [{a}] not found in module definition"
 
-            self.requires: set[str] = set()
-            self.groups = {}
-            for val in mo.REQUIRES:
-                if isinstance(val, tuple):
-                    req, anchor = val
-                    self.groups[anchor] = self.groups.get(anchor, [])+[req]
-                else:
-                    req = val
-                self.requires.add(req)
-            self.produces: set[str] = mo.PRODUCES
+            self.transform: Transform = mo.ME
             self.procedure: Callable[[ExecutionContext], dict[str, Any]] = mo.Procedure
             self.location = folder_path
         except ImportError:

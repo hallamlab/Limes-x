@@ -1,0 +1,17 @@
+name: lx_dev
+channels:
+  - conda-forge
+dependencies:
+  - jupyter
+  - notebook
+  
+  - python=3.11
+  - numpy
+  - quart
+  - hypercorn
+  - requests
+  - pyyaml
+  - pip
+  - pip:
+    - sshtunnel
+    - cryptography==36.0.2

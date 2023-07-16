@@ -3,6 +3,15 @@ import uuid
 import time
 from datetime import datetime as dt
 import numpy as np
+import os
+from pathlib import Path
+
+def GetModuleRoot():
+    return Path("/".join(os.path.realpath(__file__).split('/')[:-1]))
+
+def Version():
+    with open(GetModuleRoot().joinpath("version.txt")) as v:
+        return v.readline()
 
 class PrivateInitException(Exception):
     def __init__(self) -> None:
@@ -13,33 +22,6 @@ class PrivateInit:
 
     def __init__(self, _key=None) -> None:
         if _key != self._initializer_key: raise PrivateInitException
-
-class KeyGenerator:
-    def __init__(self, full=False) -> None:
-        ascii_vocab = [(48, 57), (65, 90), (97, 122)]
-        vocab = [chr(i) for g in [range(a, b+1) for a, b in ascii_vocab] for i in g]
-        if full: vocab += [c for c in "+="]
-        self.vocab = vocab
-
-    def GenerateUID(self, l:int=8, prefix: str="", blacklist: set[str]=set()) -> str:
-        key: str|None = None
-        while key is None or key in blacklist:
-            digits = np.random.randint(0, len(self.vocab), l)
-            key = prefix+"".join([self.vocab[i] for i in digits])
-        blacklist.add(key)
-        return key
-    
-    def FromInt(self, i: int, l: int=8, little_endian=True):
-        chunks = ['0']*l
-        place = 0
-        while i > 0:
-            assert place < l
-            chunk_k = i % len(self.vocab)
-            i = (i - chunk_k) // len(self.vocab)
-            chunks[place] = self.vocab[chunk_k]
-            place += 1
-        if not little_endian: chunks.reverse()
-        return "".join(chunks)
     
 class StdTime:
     FORMAT = '%Y-%m-%d_%H-%M-%S'

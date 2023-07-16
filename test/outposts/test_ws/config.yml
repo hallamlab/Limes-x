@@ -1,0 +1,4 @@
+outposts:
+  ssh:
+    - self
+    # - cedar

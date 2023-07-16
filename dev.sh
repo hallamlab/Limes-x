@@ -31,6 +31,22 @@ case $1 in
     --pip-remove|-x)
         pip uninstall -y limes_x
     ;;
+    --env-dev)
+        conda env remove -n lx_dev
+        mamba env create --no-default-packages -f $HERE/env_dev.yml
+    ;;
+    --env)
+        conda env remove -n lx
+        mamba env create --no-default-packages -f $HERE/env_dev.yml
+    ;;
+    --run|-r)
+        cd $HERE/src
+        shift
+        python -m limes_x $@
+        cd $HERE
+        # PYTHONPATH=$HERE/src:$PYTHONPATH
+        # python -c "from limes_x.cli import main; main()"
+    ;;
     --test|-t)
         shift
         cd $HERE/test

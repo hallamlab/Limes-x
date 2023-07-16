@@ -32,7 +32,7 @@ setuptools.setup(
     },
     entry_points={
         'console_scripts': [
-            'lx = limes_x:main',
+            'lx = limes_x.cli:main',
         ]
     },
     python_requires=">=3.10",
