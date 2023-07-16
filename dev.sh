@@ -48,12 +48,10 @@ case $1 in
         # python -c "from limes_x.cli import main; main()"
     ;;
     --test|-t)
+        cd $HERE/src
         shift
-        cd $HERE/test
-        export SLURM_TMPDIR=/home/tony/workspace/python/Limes-all/Limes-x/test/cache/temp
-        PATH=$HERE/test/mock:$PATH
-        PYTHONPATH=$HERE/src:$PYTHONPATH
-        python preset_slurm.py
+        python -m limes_x outpost -c $HERE/test/outposts/local_outpost/config.yml
+        cd $HERE
     ;;
     *)
         echo "bad option"

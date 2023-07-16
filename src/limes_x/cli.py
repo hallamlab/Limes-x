@@ -1,9 +1,10 @@
 import os, sys
 import argparse
 import asyncio
-from quart import Config
-import yaml
+from pathlib import Path
+
 from .utils import Version
+
 
 def line():
     try:
@@ -24,21 +25,26 @@ def ui(args):
 
     asyncio.run(serve(ui_app, ui_config))
 
-def outpost(args):
+def outpost(raw_args):
     from .outpost.launcher import EnsureServer, StartServer
+    from .outpost.models import Config
 
     parser = ArgumentParser(
         prog = 'lx outpost',
     )
+    parser.add_argument('-c', '--config', metavar='PATH', help="config.yml", required=True)
     parser.add_argument('-d', '--detach', action='store_true', default=False, help="detach and run in background", required=False)
 
-    config = parser.parse_args(args)
+    args = parser.parse_args(raw_args)
 
-    if config.detach:
-        pid = EnsureServer()
-        print(pid)
+    config_file = Path(args.config)
+    config = Config.Load(config_file)
+
+    if args.detach:
+        if 0 == os.fork(): # fork returns 0 in child and pid of child in parent
+            StartServer(config)
     else:
-        StartServer()
+        StartServer(config)
 
 def main_help(args=None):
     print(f"""\

@@ -1,4 +1,10 @@
 outposts:
   ssh:
-    - self
-    # - cedar
+    self:
+      host: localhost
+      port: 12100
+      ver: v1
+    # cedar:
+    #   host: localhost
+    #   port: 12100
+    #   ver: v1

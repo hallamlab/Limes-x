@@ -42,7 +42,7 @@ class ComputeModule:
             import definition as mo # type: ignore
             importlib.reload(mo)
 
-            ATTRIBUTES = ["ME", "PRODUCES", "Procedure"]
+            ATTRIBUTES = ["ME", "Procedure"]
             for a in ATTRIBUTES:
                 assert hasattr(mo, a), f"global variable [{a}] not found in module definition"
 

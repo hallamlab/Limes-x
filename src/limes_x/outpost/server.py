@@ -4,112 +4,96 @@ from quart import Quart, request
 import os
 from pathlib import Path
 from typing import Any
-import pickle, gzip, base64
 
-from .config import VER
-from .models import Context, Message
-from ..models import Transform
+from .models import Config, Context, Message
 from ..compute_module import ComputeModule
 
 # Sockets may be more correct here
 # but a transactional server is just easier
 
 class Service:
-    def __init__(self, home: Path|str) -> None:
-        self.home = Path(home)
+    def __init__(self, config: Config) -> None:
+        self.config = config
         self.modules: list[ComputeModule] = []
-        self.compression_level = 3
-    
-    def _pack(self, data: Any):
-        return base64.urlsafe_b64encode(
-            gzip.compress(
-                pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL),
-                compresslevel=self.compression_level
-            ),
-        ).decode("ascii")
-    
-    def _unpack(self, raw: str):
-        return pickle.loads(gzip.decompress(base64.urlsafe_b64decode(raw)))
 
-    def set_home(self, payload: Any):
-        if isinstance(payload, Path):
-            home = payload
-        # elif isinstance(payload, dict) and "home" in payload:
-        #     home = Path(payload["home"])
-        else:
-            return
-        if home.exists() and home.is_dir():
-            self.home = home
-
-    def reload_modules(self, payload: Any):
-        cm_dir = self.home.joinpath("compute_modules")
-        if not (cm_dir.exists() and cm_dir.is_dir()):
-            return
+    def set_config(self, payload: Any):
+        if not isinstance(payload, Config):
+            return f"expected Config, got [{type(payload)}]", Context.ERROR
         
-        for dir in os.listdir(cm_dir):
-            mpath = cm_dir.joinpath(dir)
-            try:
-                module = ComputeModule(mpath)
-                self.modules.append(module)
-            except AssertionError:
-                continue
+        config: Config = payload
+        old_config = self.config
+        self.config = config
+        if config.home != old_config.home:
+            cm_dir = self.config.home.joinpath("compute_modules")
+            if not (cm_dir.exists() and cm_dir.is_dir()):
+                # print(f"{cm_dir} doesn't exist")
+                return
+            
+            for dir in os.listdir(cm_dir):
+                mpath = cm_dir.joinpath(dir)
+                # print(mpath)
+                try:
+                    module = ComputeModule(mpath)
+                    self.modules.append(module)
+                except AssertionError as a:
+                    continue
+        print("compute modules:")
+        for m in self.modules:
+            print(f"\t- {m} {m.transform}")
 
     def list_transforms(self, payload: Any):
         return [m.transform for m in self.modules]
 
     def Handle(self, msg: Message) -> Message:
-        
         fn_name = msg.context.name.lower()
         if hasattr(self, fn_name):
             try:
-                content = self._unpack(msg.payload)
-                result = getattr(self, fn_name)(content)
-                return Message(msg.key, Context.RESPONSE, self._pack(result))
+                content = msg.payload
+                r = getattr(self, fn_name)(content)
+                if isinstance(r, tuple) and len(r) == 2:
+                    result, r_context = r
+                else:
+                    result, r_context = r, Context.RESPONSE
+                return Message(r_context, result, msg.key)
             except Exception as e:
-                return Message(msg.key, Context.ERROR, f"error [{e}]")
+                return Message(Context.ERROR, f"error [{e}]", msg.key)
 
-        return Message(msg.key, Context.ERROR, ["I don't know what to do with this", msg.context, msg.payload])
+        return Message(Context.ERROR, ["I don't know what to do with this", msg.context, msg.payload], msg.key)
 
-pid = None
+pid = os.getpid()
+print(f"pid: {pid}")
 
 api_app = Quart(__name__)
-service = Service("./")
+service = Service(Config())
 
 @api_app.route('/', methods=['GET'])
 async def home():
     return f"Limes-x api! pid:{pid}"
 
-@api_app.route(f'/{VER}/', methods=['POST'])
+# routes will not change if "ver" is changed in config...
+@api_app.route(f'/{service.config.ver}/', methods=['POST'])
 async def api():
-    data = await request.get_json(silent=True)
+    data = await request.get_data(as_text=True)
     try:
-        m = Message.FromDict(data)
+        m = Message.Unpack(data)
 
         if m.context == Context.PING:
-            res = Message(m.key, Context.PING, m.payload)
+            res = Message(Context.PING, m.payload, m.key, )
         else:
             res = service.Handle(m)
     except Exception as e:
-        res = Message("", Context.ERROR, f"critical format error, [{e}]")
+        res = Message(Context.ERROR, f"critical format error, [{e}]", "")
     
-    print(res)
     if res.context == Context.ERROR:
-        return res.ToDict(), 500
+        return res.Pack(), 500
     else:
-        return res.ToDict(), 200
+        return res.Pack(), 200
 
-@api_app.route(f'/{VER}/register_pid', methods=['POST'])
-async def register_pid():
-    data = await request.get_json()
-    global pid
-    pid = data.get("pid")
-    return dict(echo=data)
-
-@api_app.route(f'/{VER}/get_pid', methods=['GET'])
+@api_app.route(f'/{service.config.ver}/get_pid', methods=['GET'])
 async def get_pid():
     return dict(pid=pid)
 
-@api_app.route(f'/{VER}/kill', methods=['GET'])
+@api_app.route(f'/{service.config.ver}/kill', methods=['GET'])
 async def kill():
     os.system(f"kill {pid}")
     return dict(notice="killed")

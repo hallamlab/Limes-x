@@ -1,36 +1,100 @@
-from dataclasses import dataclass
+from __future__ import annotations
+import os
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
+from pathlib import Path
+import yaml
+import pickle, gzip, base64
+from hypercorn.config import Config as HypercornConfig
+
+from ..models import KeyGenerator
+
+
+@dataclass
+class Config:
+    host: str = "localhost"
+    port: int = 12100
+    ver: str = "v1"
+    home: Path = field(default_factory=lambda: Path("./"))
+
+    def HypercornConfig(self):
+        hc = HypercornConfig()
+        hc.bind = [f"{self.host}:{self.port}"]
+        return hc
+    
+    def Url(self):
+        return f"http://{self.host}:{self.port}/{self.ver}"
+
+    @classmethod
+    def FromDict(cls, raw: dict, default: Config|None=None):
+        if default is None: default = Config()
+        c = Config() if default is None else default
+        for k, v in c.__dataclass_fields__.items():
+            if k not in raw: continue
+            constr = {
+                "port": int,
+                "home": lambda p: Path(os.path.abspath(p)),
+            }.get(v.name, str)
+            setattr(c, k, constr(raw[k]))
+        return c
+
+    @classmethod
+    def Load(cls, config_file: Path|str):
+        config_file = Path(config_file)
+        assert config_file.exists(), f"config [{config_file}] doesn't exist"
+        assert config_file.is_file(),f"config [{config_file}] isn't a file"
+        here = os.getcwd()
+        os.chdir(config_file.parent)
+        c = Config()
+        try:
+            with open(config_file.name) as y:
+                d = yaml.safe_load(y)
+                c = cls.FromDict(d, c)
+        finally:
+            os.chdir(here)
+        return c
 
 class Context(Enum):
     PING = auto()
     ERROR = auto()
     NOTICE = auto()
     RESPONSE = auto()
-    SET_HOME = auto()
+    SET_CONFIG = auto()
     RELOAD_MODULES = auto()
     LIST_TRANSFORMS = auto()
     REGISTER_JOB = auto()
     CANCEL_JOB  = auto()
 
+COMPRESSION_LEVEL = 3
+_keygen = KeyGenerator(True)
+
 @dataclass
 class Message:
-    key: str
     context: Context
     payload: Any
+    key: str = field(default_factory=lambda: _keygen.GenerateUID(12))
 
-    @classmethod
-    def FromDict(cls, raw: dict):
-        kwargs = {}
-        for k in cls.__dataclass_fields__:
-            assert k in raw
-            if k == "context":
-                kwargs[k] = Context[raw[k]]
-            else:
-                kwargs[k] = raw[k]
-        return Message(**kwargs)
+    def _pack(self, data: Any):
+        return base64.urlsafe_b64encode(
+            gzip.compress(
+                pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL),
+                compresslevel=COMPRESSION_LEVEL
+            ),
+        ).decode("ascii")
     
-    def ToDict(self):
-        d = self.__dict__.copy()
-        d["context"] = self.context.name
-        return d
+    def _unpack(self, raw: str):
+        return pickle.loads(gzip.decompress(base64.urlsafe_b64decode(raw)))
+    
+
+    def Pack(self):
+        raw = gzip.compress(
+            pickle.dumps(self, protocol=pickle.HIGHEST_PROTOCOL),
+            compresslevel=COMPRESSION_LEVEL
+        )
+        return base64.urlsafe_b64encode(raw).decode("ascii")
+    
+    @classmethod
+    def Unpack(cls, raw: str):
+        raw_b = base64.urlsafe_b64decode(raw)
+        return pickle.loads(gzip.decompress(raw_b))
