@@ -4,8 +4,8 @@ import limes_x as lx
 from limes_x.presets.slurm import Run
 
 modules: list[lx.ComputeModule] = []
-modules += lx.LoadComputeModules("../../Limes-compute-modules/logistics")
-modules += lx.LoadComputeModules("../../Limes-compute-modules/metagenomics")
+modules += lx.LoadComputeModules("../../../Limes-compute-modules/logistics")
+modules += lx.LoadComputeModules("../../../Limes-compute-modules/metagenomics")
 
 Run(
     modules = modules,
@@ -34,7 +34,7 @@ Run(
         )
     ],
     allocation="alloc_code",
-    # continue_from="folder_name",
+    continue_from="2023-07-17_13-34.5e5-test_run",
     # time="48:00:00",
-    # name="a test run",
+    name="test_run",
 )

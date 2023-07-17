@@ -230,7 +230,10 @@ def Run(
             cd {run_folder}
             mv {OUT_LOG} {prev_name}/
             mv slurm_stats.txt {prev_name}/
-            mv slurm_context.json {prev_name}/ 
+            mv slurm.out {prev_name}/
+            mv slurm.err {prev_name}/
+            mv slurm_context.json {prev_name}/
+            mv workflow_state.json {prev_name}/
             ls | grep .out | grep slurm- | xargs -I % mv % {prev_name}/
         """)
 
