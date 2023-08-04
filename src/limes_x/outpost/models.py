@@ -95,6 +95,6 @@ class Message:
         return base64.urlsafe_b64encode(raw).decode("ascii")
     
     @classmethod
-    def Unpack(cls, raw: str):
+    def Unpack(cls, raw: str) -> Message:
         raw_b = base64.urlsafe_b64decode(raw)
         return pickle.loads(gzip.decompress(raw_b))

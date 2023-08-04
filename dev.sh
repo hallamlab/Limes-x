@@ -37,7 +37,7 @@ case $1 in
     ;;
     --env)
         conda env remove -n lx
-        mamba env create --no-default-packages -f $HERE/env_dev.yml
+        mamba env create --no-default-packages -f $HERE/env.yml
     ;;
     --run|-r)
         cd $HERE/src
@@ -48,10 +48,12 @@ case $1 in
         # python -c "from limes_x.cli import main; main()"
     ;;
     --test|-t)
-        cd $HERE/src
-        shift
-        python -m limes_x outpost -c $HERE/test/outposts/local_outpost/config.yml
-        cd $HERE
+        # cd $HERE/src
+        # shift
+        # python -m limes_x outpost -c $HERE/test/outposts/local_outpost/config.yml
+        # cd $HERE
+
+        
     ;;
     *)
         echo "bad option"

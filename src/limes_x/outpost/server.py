@@ -37,7 +37,9 @@ class Service:
                     self.modules.append(module)
                 except AssertionError as a:
                     continue
-        print("compute modules:")
+
+        print(f"config loaded [{config.home}]")
+        print(f"compute modules:")
         for m in self.modules:
             print(f"\t- {m} {m.transform}")
 
@@ -60,11 +62,10 @@ class Service:
 
         return Message(Context.ERROR, ["I don't know what to do with this", msg.context, msg.payload], msg.key)
 
+service = Service(Config())
 pid = os.getpid()
 print(f"pid: {pid}")
-
 api_app = Quart(__name__)
-service = Service(Config())
 
 @api_app.route('/', methods=['GET'])
 async def home():

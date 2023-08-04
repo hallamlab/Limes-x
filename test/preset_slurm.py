@@ -23,13 +23,13 @@ Run(
     ],
     given=[
         lx.InputGroup(  
-            group_by=(lx.Item("sra accession"), "SRR10140508"), 
+            group_by=(lx.Item("sra accession"), "SRR1805320"), 
             children={
                 lx.Item("username"): "Tony",
-                lx.Item("metagenomic gzipped reads"): [Path(p) for p in [
-                    "/home/tony/workspace/python/Limes-all/Limes-x/test/cache/SRR10140508/SRR10140508_1.fastq.gz",
-                    "/home/tony/workspace/python/Limes-all/Limes-x/test/cache/SRR10140508/SRR10140508_2.fastq.gz",
-                ]],
+                # lx.Item("metagenomic gzipped reads"): [Path(p) for p in [
+                #     "/home/tony/workspace/python/Limes-all/Limes-x/test/cache/SRR10140508/SRR10140508_1.fastq.gz",
+                #     "/home/tony/workspace/python/Limes-all/Limes-x/test/cache/SRR10140508/SRR10140508_2.fastq.gz",
+                # ]],
             },
         )
     ],

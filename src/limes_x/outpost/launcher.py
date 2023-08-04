@@ -17,7 +17,6 @@ def StartServer(config: Config):
             time.sleep(0.1)
             res = requests.post(url, data=Message(Context.SET_CONFIG, config).Pack())
             if res.status_code == 200:
-                print(f"config [{config.home}] loaded")
                 break
     else:
         asyncio.run(serve(api_app, config.HypercornConfig()))

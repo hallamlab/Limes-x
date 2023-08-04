@@ -3,13 +3,14 @@ from limes_x.compute_module import ExecutionContext, CreateTransform
 
 ME = CreateTransform()
 
-A = ME.AddRequirement({"a"})
+READS = ME.AddRequirement({"a"})
+ME.AddRequirement({"sif", "example_image"})
 B = ME.AddProduct({"b"})
 
 def Procedure(context: ExecutionContext) -> dict:
     M = context.manifest
     out = context.output_folder
-    a = M[A]
+    a = M[READS]
     copied: Path = out.joinpath(a.name)
     context.Shell(f"""\
         cp {a} {copied}

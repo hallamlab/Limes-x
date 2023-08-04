@@ -2,6 +2,10 @@ outposts:
   ssh:
     self:
       host: localhost
+      # port: 12100
+      ver: v1
+    cosmos:
+      host: localhost
       port: 12100
       ver: v1
     # cedar:
