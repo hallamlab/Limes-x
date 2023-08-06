@@ -1,0 +1,17 @@
+executors:
+  local:
+    self_local:
+      port: 12100
+  # ssh:
+  #   self:
+  #     host: localhost
+  #     # port: 12100
+  #     ver: v1
+  #   cosmos:
+  #     host: localhost
+  #     port: 12100
+  #     ver: v1
+    # cedar:
+    #   host: localhost
+    #   port: 12100
+    #   ver: v1

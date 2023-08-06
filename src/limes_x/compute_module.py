@@ -2,8 +2,9 @@ import os, sys
 from typing import Callable, Any
 from pathlib import Path
 import importlib
+import hashlib
 
-from .models import Namespace, Dependency, Transform
+from .models import Namespace, Dependency, Transform, KeyGenerator
 
 # --------------------------------------------------
 # meant for external use such as module definitions
@@ -13,8 +14,17 @@ def LazySet(properties: str):
     """@properties will be split using ', '"""
     return set(properties.split(", "))
 
-def CreateTransform():
-    return Transform(Namespace())
+def CreateTransform(file: str):
+    fpath = Path(file)
+    assert fpath.exists(), f"file not found [{file}]"
+    contents = ""
+    with open(file) as f:
+        contents = "\n".join(f.readlines())
+    hash = hashlib.md5(contents.encode(encoding="latin1"))
+    tr = Transform(Namespace())
+    tr.key = KeyGenerator(True).FromHex(hash.hexdigest(), l=16)
+    return tr
+
 # --------------------------------------------------
 
 class ExecutionContext:
@@ -27,20 +37,22 @@ class ExecutionContext:
         return self._shell(cmd)
 
 class ComputeModule:
-    _DEFINITION_FILE_NAME = 'definition.py'
-    def __init__(self, folder_path: str|Path):
-        folder_path = Path(os.path.abspath(folder_path))
-        self.name = folder_path.name
-        assert os.path.exists(folder_path), f"path [{folder_path}] doesn't exist"
-        def_file = folder_path.joinpath(f'{self._DEFINITION_FILE_NAME}')
-        assert def_file.exists(), f"def. file at {def_file} doesn't exist"
-        assert os.path.isfile(def_file), f"def file at {def_file} isn't file"
+    def __init__(self, definition: str|Path):
+        definition = Path(os.path.abspath(definition))
+        assert os.path.exists(definition), f"path [{definition}] doesn't exist"
+        assert os.path.isfile(definition), f"definition at [{definition}] isn't a file"
+        self.name = definition.name
+        SUFFIX = ".py"
+        assert self.name.endswith(SUFFIX), f"definition at [{self.name}] doesn't end with [{SUFFIX}]"
+        self.name = self.name[:-len(SUFFIX)]
 
+        folder_path = definition.parent
         original_path = sys.path
         sys.path = [str(folder_path)]+sys.path
         try:
-            import definition as mo # type: ignore
-            importlib.reload(mo)
+            mo = __import__(f"{self.name}")
+            # import self.name as mo # type: ignore
+            # importlib.reload(mo)
 
             ATTRIBUTES = ["ME", "Procedure"]
             for a in ATTRIBUTES:
@@ -49,8 +61,9 @@ class ComputeModule:
             self.transform: Transform = mo.ME
             self.procedure: Callable[[ExecutionContext], dict[str, Any]] = mo.Procedure
             self.location = folder_path
-        except ImportError:
-            raise ImportError(f"failed to import [{self.name}] at [{folder_path}]")
+        except ImportError as e:
+            # raise ImportError(f"failed to import [{self.name}] at [{folder_path}]")
+            raise ImportError(e)
         finally:
             sys.path = original_path
 

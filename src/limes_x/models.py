@@ -1,7 +1,8 @@
 from __future__ import annotations
+from pathlib import Path
 import numpy as np
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Generator
 
 class KeyGenerator:
     def __init__(self, full=False) -> None:
@@ -21,14 +22,16 @@ class KeyGenerator:
     def FromInt(self, i: int, l: int=8, little_endian=True):
         chunks = [self.vocab[0]]*l
         place = 0
-        while i > 0:
-            assert place < l
+        while i > 0 and place < l:
             chunk_k = i % len(self.vocab)
             i = (i - chunk_k) // len(self.vocab)
             chunks[place] = self.vocab[chunk_k]
             place += 1
         if not little_endian: chunks.reverse()
         return "".join(chunks)
+    
+    def FromHex(self, hex: str, l: int=8, little_endian=True):
+        return self.FromInt(int(hex, 16), l, little_endian)
 
 class Namespace:
     def __init__(self) -> None:
@@ -55,12 +58,12 @@ class Hashable:
         K = "key"
         return hasattr(__value, K) and self.key == getattr(__value, K)
 
-class Prototype(Hashable):
+class Node(Hashable):
     def __init__(
         self,
         ns: Namespace,
         properties: set[str],
-        parents: set[Prototype],
+        parents: set[Node],
     ) -> None:
         super().__init__(ns)
         self.namespace = ns
@@ -76,7 +79,7 @@ class Prototype(Hashable):
     def __repr__(self) -> str:
         return f"{self}"
     
-    def IsA(self, other: Prototype) -> bool:
+    def IsA(self, other: Node) -> bool:
         # if other.key in self._diffs: return False
         # if other.key in self._sames: return True
         if not other.properties.issubset(self.properties):
@@ -93,25 +96,25 @@ class Prototype(Hashable):
             self._sig = f'{sig}:[{psig}]' if len(self.parents)>0 else sig
         return self._sig
 
-class Dependency(Prototype):
-    def __init__(self, namespace: Namespace, properties: set[str], parents: set[Prototype]) -> None:
+class Dependency(Node):
+    def __init__(self, namespace: Namespace, properties: set[str], parents: set[Node]) -> None:
         super().__init__(namespace, properties, parents)
 
     def __str__(self) -> str:
         return f"(D:{'-'.join(self.properties)})"
     
-class Endpoint(Prototype):
-    def __init__(self, namespace: Namespace, properties: set[str], parents: dict[Endpoint, Prototype]=dict()) -> None:
+class Endpoint(Node):
+    def __init__(self, namespace: Namespace, properties: set[str], parents: dict[Endpoint, Node]=dict()) -> None:
         super().__init__(namespace, properties, set(parents))
         self._parent_map = parents # real, proto
 
     def Iterparents(self):
-        """real, prototype(Dependency)"""
+        """real, prototype"""
         for e, p in self._parent_map.items():
             yield e, p
 
 class DataInstance:
-    def __init__(self, prototype: Endpoint, value: str|list|dict, key: str|None=None) -> None:
+    def __init__(self, prototype: Endpoint, value: Path, key: str|None=None) -> None:
         self.endpoint = prototype
         self.value = value
         self.key = key
@@ -141,7 +144,7 @@ class Transform(Hashable):
 
     def _add_dependency(self, destination: list[Dependency], properties: Iterable[str], parents: set[Dependency]=set()):
         _parents: Any = parents
-        _dep = Dependency(properties=set(p.lower() for p in properties), parents=_parents, namespace=self._ns)
+        _dep = Dependency(properties=set(properties), parents=_parents, namespace=self._ns)
         # assert not any(e.IsA(_dep) for e in destination), f"prev. dep ⊆ new dep"
         # assert not any(_dep.IsA(e) for e in destination), f"new dep ⊆ prev. dep "
         # destination.add(_dep)
@@ -153,7 +156,67 @@ class Transform(Hashable):
             self._input_group_map[i] = self._input_group_map.get(i, [])+list(_parents)
         return _dep
 
-    def Apply(self, inputs: Iterable[tuple[Endpoint, Prototype]]):
+    def _sig(self, endpoints: Iterable[Endpoint]):
+        # return "".join(e.key for e in endpoints)
+        return self.key+"-"+ "".join(e.key for e in endpoints)
+
+    # just all possibilities regardless of lineage
+    def Possibilities(self, have: set[Endpoint], constraints: dict[Dependency, Endpoint]=dict()) -> Generator[list[Endpoint], Any, None]:
+        matches: list[list[Endpoint]] = []
+        constraints_used = False
+        for req in self.requires:
+            if req in constraints:
+                must_use = constraints[req]
+                _m = [must_use]
+            else:
+                _m = [m for m in have if m.IsA(req)]
+            if len(_m) == 0: return None
+            matches.append(_m)
+        if len(constraints)>0 and not constraints_used: return None
+
+        indexes = [0]*len(matches)
+        indexes[0] = -1
+        def _advance():
+            i = 0
+            while True:
+                indexes[i] += 1
+                if indexes[i] < len(matches[i]): return True
+                indexes[i] = 0
+                i += 1
+                if i >= len(matches): return False
+        while _advance():
+            yield [matches[i][j] for i, j in enumerate(indexes)]
+    
+    # filter possibilities based on correct lineage
+    def Valids(self, matches: Iterable[list[Endpoint]]):
+        black_list: set[tuple[int, Endpoint]] = set()
+        white_list: set[tuple[int, Endpoint]] = set()
+
+        choosen: list[Endpoint] = []
+        for config in matches:
+            ok = True
+            for i, (e, r) in enumerate(zip(config, self.requires)):
+                k = (i, e)
+                if k in black_list: ok=False; break
+                if k in white_list: continue
+                
+                parents = self._input_group_map.get(i, [])
+                if len(parents) == 0: # no lineage req.
+                    white_list.add(k)
+                    continue
+                
+                for prototype in parents:
+                    # parent must already be in choosen, since it must have been added
+                    # as a req. before being used as a parent during setup
+                    found = False
+                    for p in choosen:
+                        if not p.IsA(prototype): continue
+                        if p in e.parents: found=True; break
+                    if not found: black_list.add(k); ok=False; break
+                if not ok: break
+            if ok: yield config
+
+    def Apply(self, inputs: Iterable[tuple[Endpoint, Node]]):
         for r, (e, e_proto) in zip(self.requires, inputs):
             assert e.IsA(r), f"{e_proto}, {e}, {r}"
 
@@ -177,7 +240,7 @@ class Transform(Hashable):
 @dataclass
 class Application:
     transform: Transform
-    used: dict[Endpoint, Prototype]
+    used: dict[Endpoint, Node]
     produced: dict[Endpoint, Dependency]
 
     def __str__(self) -> str:
@@ -187,16 +250,16 @@ class Application:
         return f"{self}"
 
 @dataclass
-class Result:
+class HasSteps:
     steps: int
 
 @dataclass
-class TrResult(Result):
+class Result(HasSteps):
     application: Application
     dependency_plan: list[Application]
     
 @dataclass
-class DepResult(Result):
+class DepResult(HasSteps):
     plan: list[Application]
     endpoint: Endpoint
 
@@ -205,7 +268,7 @@ def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Tra
     class State:
         have: dict[Endpoint, Dependency]
         target: Dependency|Transform
-        lineage_requirements: dict[Prototype, Endpoint]
+        lineage_requirements: dict[Node, Endpoint]
         seen_signatures: set[str]
         depth: int
 
@@ -219,13 +282,12 @@ def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Tra
     # if DEBUG: debug_print = lambda *args: None
     # if DEBUG: debug_print = lambda *args: None
     # DEBUG = True
-    # log = open("./cache/debug_log.txt", "w")
-    # debug_print = lambda *args: log.write(" ".join(str(a) for a in args)+"\n") if args[0] != "END" else log.close()
     DEBUG = False
-    debug_print = lambda *_: None
+    log = open("./cache/debug_log.txt", "w")
+    debug_print = lambda *args: log.write(" ".join(str(a) for a in args)+"\n") if args[0] != "END" else log.close()
 
     _apply_cache: dict[str, Application] = {}
-    def _apply(target: Transform, inputs: Iterable[tuple[Endpoint, Prototype]]):
+    def _apply(target: Transform, inputs: Iterable[tuple[Endpoint, Node]]):
         sig  = "".join(e.key+d.key for e, d in inputs)
         if sig in _apply_cache:
             return _apply_cache[sig]
@@ -273,7 +335,7 @@ def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Tra
             #     if DEBUG: debug_print(f" <-", s.target, e, "DIRECT")
             #     return [DepResult(0, [], e)]
 
-        def _add_result(res: TrResult):
+        def _add_result(res: Result):
             ep: Endpoint|None = None
             for e in res.application.produced:
                 if e.IsA(target):
@@ -294,8 +356,8 @@ def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Tra
         if DEBUG: debug_print(f" <-", s.target, f"{len(candidates)} sol.", candidates[0].endpoint if len(candidates)>0 else None)
         return candidates
 
-    _transform_cache: dict[str, list[TrResult]] = {}
-    def _solve_tr(s: State) -> list[TrResult]:
+    _transform_cache: dict[str, list[Result]] = {}
+    def _solve_tr(s: State) -> list[Result]:
         assert isinstance(s.target, Transform), f"{s.target} not tr"
         target: Transform = s.target
         if DEBUG: debug_print(f">>>{s.depth:02}", s.target, s.lineage_requirements)
@@ -378,7 +440,7 @@ def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Tra
 
         if DEBUG: debug_print(f"<<<{s.depth:02}", s.target, s.lineage_requirements)
         if DEBUG: debug_print(f"     ", [len(x) for x in plans])
-        solutions: list[TrResult] = []
+        solutions: list[Result] = []
         # for inputs in _iter_satisfies():
         for inputs in _gather_valid_inputs():
             my_appl = _apply(s.target, [(res.endpoint, req) for req, res in zip(s.target.requires, inputs)])
@@ -390,7 +452,7 @@ def Solve(given: Iterable[Endpoint], target: Transform, transforms: Iterable[Tra
                     if all(p.Signature() in produced_sigs for p in appl.produced): continue
                     consolidated_plan.append(appl)
                     produced_sigs = produced_sigs.union(p.Signature() for p in appl.produced)
-            solutions.append(TrResult(
+            solutions.append(Result(
                 len(consolidated_plan),
                 my_appl,
                 consolidated_plan,

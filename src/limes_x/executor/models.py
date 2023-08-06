@@ -1,4 +1,5 @@
 from __future__ import annotations
+from email.mime import application
 import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -8,7 +9,8 @@ import yaml
 import pickle, gzip, base64
 from hypercorn.config import Config as HypercornConfig
 
-from ..models import KeyGenerator
+from ..compute_module import ComputeModule
+from ..models import Application, DataInstance, KeyGenerator, Transform
 
 
 @dataclass
@@ -17,6 +19,8 @@ class Config:
     port: int = 12100
     ver: str = "v1"
     home: Path = field(default_factory=lambda: Path("./"))
+    compute_modules: list[Path] = field(default_factory=lambda: [Path("./compute_modules")])
+    job_update_interval: int = 600 # 10 minutes
 
     def HypercornConfig(self):
         hc = HypercornConfig()
@@ -35,6 +39,7 @@ class Config:
             constr = {
                 "port": int,
                 "home": lambda p: Path(os.path.abspath(p)),
+                "compute_modules": lambda ps: [Path(os.path.abspath(p)) for p in ps],
             }.get(v.name, str)
             setattr(c, k, constr(raw[k]))
         return c
@@ -63,8 +68,7 @@ class Context(Enum):
     SET_CONFIG = auto()
     RELOAD_MODULES = auto()
     LIST_TRANSFORMS = auto()
-    REGISTER_JOB = auto()
-    CANCEL_JOB  = auto()
+    REGISTER_PLAN = auto()
 
 COMPRESSION_LEVEL = 3
 _keygen = KeyGenerator(True)
@@ -72,7 +76,7 @@ _keygen = KeyGenerator(True)
 @dataclass
 class Message:
     context: Context
-    payload: Any
+    payload: Any = None
     key: str = field(default_factory=lambda: _keygen.GenerateUID(12))
 
     def _pack(self, data: Any):
@@ -98,3 +102,10 @@ class Message:
     def Unpack(cls, raw: str) -> Message:
         raw_b = base64.urlsafe_b64decode(raw)
         return pickle.loads(gzip.decompress(raw_b))
+
+@dataclass
+class Plan:
+    have: list[DataInstance]
+    execution_order: list[Application]
+    in_progress: list[Application] = field(default_factory=lambda: list())
+    finished: list[Application] = field(default_factory=lambda: list())

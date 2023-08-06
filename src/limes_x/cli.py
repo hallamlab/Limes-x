@@ -26,8 +26,8 @@ def ui(args):
     asyncio.run(serve(ui_app, ui_config))
 
 def outpost(raw_args):
-    from .outpost.launcher import EnsureServer, StartServer
-    from .outpost.models import Config
+    from .executor.launcher import EnsureServer, StartServer
+    from .executor.models import Config
 
     parser = ArgumentParser(
         prog = 'lx outpost',
