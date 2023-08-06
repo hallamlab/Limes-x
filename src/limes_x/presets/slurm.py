@@ -97,9 +97,9 @@ if (len(sys.argv)>1 and sys.argv[1] == _INNER):
             "download_sra":             lambda: (cores, 6,  mem),
             "extract_mg-reads":         lambda: (cores, 4,  mem),
             "metagenomic_assembly":     _asm,
-            "metagenomic_binning":      lambda: (16, 24, 60), # todo scale this
+            "metagenomic_binning":      lambda: (cores, 24, 60), # todo scale this
             "taxonomy_on_bin":          _tax_bin,
-            "taxonomy_on_assembly":     lambda: (2, 4,  60),
+            "taxonomy_on_assembly":     lambda: (cores, 4,  60),
             "checkm_on_bin":            lambda: (cores, 2,  mem),
             "annotation_metapathways":  lambda: (cores, 16,  mem),
             "annotation_eggnog":        lambda: (cores, 16,  mem),
